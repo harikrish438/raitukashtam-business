@@ -1,0 +1,60 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /api/auth
+
+spring:
+  main:
+    time-zone: Asia/Kolkata
+  application:
+    name: auth-service
+  datasource:
+    url: jdbc:postgresql://localhost:5432/jwt_auth_db?currentSchema=public&stringtype=unspecified&TimeZone=Asia/Kolkata
+    username: jwt_user
+    password: jwt_password
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      connection-timeout: 30000
+      maximum-pool-size: 10
+      minimum-idle: 2
+      idle-timeout: 30000
+      max-lifetime: 120000
+      connection-init-sql: |
+        SET TIME ZONE 'Asia/Kolkata';
+        SET timezone = 'Asia/Kolkata';
+      data-source-properties:
+        prepareThreshold: 0
+        preferQueryMode: simple
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          time_zone: Asia/Kolkata
+    show-sql: true
+
+jwt:
+  # JWT Configuration
+  secret: my-super-secret-key-please-change-this-in-production
+  issuer: raitukashtam-auth-service
+  
+  # Token expiration times in milliseconds
+  access-token-exp-ms: 900000        # 15 minutes
+  refresh-token-exp-ms: 604800000    # 7 days
+  access-expiration: 900000          # Alias for backward compatibility
+  refresh-expiration: 604800000      # Alias for backward compatibility
+  
+  # Token validation settings
+  clock-skew: 60  # 60 seconds clock skew for token validation
+  
+  # Token issuer and audience
+  audience: raitukashtam-client
+  
+  # Token headers
+  header-names:
+    access-token: Authorization
+    refresh-token: X-Refresh-Token
+    token-type: Bearer

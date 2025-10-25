@@ -1,0 +1,59 @@
+package com.raitukashtam.auth.jwt;
+
+import com.auth0.jwt.JWT;
+import com.auth0.jwt.algorithms.Algorithm;
+import com.auth0.jwt.interfaces.DecodedJWT;
+import com.auth0.jwt.interfaces.JWTVerifier;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+
+import java.util.Date;
+import java.util.UUID;
+
+@Component
+public class JwtTokenUtil {
+
+    @Value("${jwt.secret}")
+    private String secret;
+
+    @Value("${jwt.issuer}")
+    private String issuer;
+
+    @Value("${jwt.access-expiration}")
+    private long accessExpiration;
+
+    @Value("${jwt.refresh-expiration}")
+    private long refreshExpiration;
+
+    public String generateAccessToken(String username, String role) {
+        return JWT.create()
+                .withIssuer(issuer)
+                .withSubject(username)
+                .withClaim("role", role)
+                .withJWTId(UUID.randomUUID().toString())  // Add JWT ID
+                .withIssuedAt(new Date())
+                .withExpiresAt(new Date(System.currentTimeMillis() + accessExpiration))
+                .sign(Algorithm.HMAC256(secret));
+    }
+
+    public String generateRefreshToken(String username) {
+        return JWT.create()
+                .withIssuer(issuer)
+                .withSubject(username)
+                .withClaim("type", "refresh")
+                .withJWTId(UUID.randomUUID().toString())
+                .withIssuedAt(new Date())
+                .withExpiresAt(new Date(System.currentTimeMillis() + refreshExpiration))
+                .sign(Algorithm.HMAC256(secret));
+    }
+
+    public DecodedJWT validateToken(String token) {
+        JWTVerifier verifier = JWT.require(Algorithm.HMAC256(secret))
+                .withIssuer(issuer)
+                .build();
+        return verifier.verify(token);
+    }
+}
+
+
+
