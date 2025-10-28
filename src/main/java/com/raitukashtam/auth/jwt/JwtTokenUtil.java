@@ -25,22 +25,25 @@ public class JwtTokenUtil {
     @Value("${jwt.refresh-expiration}")
     private long refreshExpiration;
 
-    public String generateAccessToken(String username, String role) {
+    public String generateAccessToken(String username, String role, String tenantCode) {
         return JWT.create()
                 .withIssuer(issuer)
                 .withSubject(username)
                 .withClaim("role", role)
+                .withClaim("tenant_code", tenantCode)
                 .withJWTId(UUID.randomUUID().toString())  // Add JWT ID
                 .withIssuedAt(new Date())
                 .withExpiresAt(new Date(System.currentTimeMillis() + accessExpiration))
                 .sign(Algorithm.HMAC256(secret));
     }
 
-    public String generateRefreshToken(String username) {
+    public String generateRefreshToken(String username, String role, String tenantCode) {
         return JWT.create()
                 .withIssuer(issuer)
                 .withSubject(username)
                 .withClaim("type", "refresh")
+                .withClaim("role", role)
+                .withClaim("tenant_code", tenantCode)
                 .withJWTId(UUID.randomUUID().toString())
                 .withIssuedAt(new Date())
                 .withExpiresAt(new Date(System.currentTimeMillis() + refreshExpiration))

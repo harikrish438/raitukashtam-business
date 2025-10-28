@@ -11,11 +11,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
@@ -36,8 +39,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                                     FilterChain filterChain)
             throws ServletException, IOException {
 
+        if (isPublicEndpoint(request)) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
         String authHeader = request.getHeader("Authorization");
-        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+        if(authHeader == null) {
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            response.getWriter().write("Token not found");
+            return;
+        }
+        if (authHeader.startsWith("Bearer ")) {
             try {
                 String token = authHeader.substring(7);
                 if (token.isEmpty()) {
@@ -50,6 +63,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 String username = decodedJWT.getSubject();
                 String role = decodedJWT.getClaim("role").asString();
                 String jti = decodedJWT.getId();
+                String tenantCode = decodedJWT.getClaim("tenant_code").asString();
 
                 if (tokenService.isAccessTokenRevoked(jti)) {
                     response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
@@ -62,6 +76,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                         null,
                         Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + role))
                 );
+                // Add tenant code as a detail
+                auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                // Set tenant code in details
+                Map<String, Object> details = new HashMap<>();
+                details.put("tenant_code", tenantCode);
+                details.put("remoteAddress", request.getRemoteAddr());
+                auth.setDetails(details);
                 SecurityContextHolder.getContext().setAuthentication(auth);
             } catch (Exception e) {
                 response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
@@ -71,4 +92,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
         filterChain.doFilter(request, response);
     }
+
+    private boolean isPublicEndpoint(HttpServletRequest request) {
+        String path = request.getServletPath();
+            return
+                path.startsWith("/users/register") ||
+                path.startsWith("/token") ||
+                path.equals("/tenants/create");
+    }
+
+
 }
