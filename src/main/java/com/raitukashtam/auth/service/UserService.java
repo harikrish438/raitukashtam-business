@@ -5,6 +5,7 @@ import com.raitukashtam.auth.exception.AuthenticationException;
 import com.raitukashtam.auth.exception.ResourceAlreadyExistsException;
 import com.raitukashtam.auth.exception.ResourceNotFoundException;
 import com.raitukashtam.auth.model.UserRole;
+import com.raitukashtam.auth.repository.RefreshTokenRepository;
 import com.raitukashtam.auth.repository.TenantRepository;
 import com.raitukashtam.auth.repository.UserRepository;
 import com.raitukashtam.auth.response.UserResponse;
@@ -29,6 +30,9 @@ public class UserService {
     private TenantRepository tenantRepository;
 
     @Autowired
+    private RefreshTokenRepository refreshTokenRepository;
+
+    @Autowired
     ModelMapper modelMapper;
 
     @Transactional
@@ -41,6 +45,10 @@ public class UserService {
 
         if (userRepository.existsByEmail(email)) {
             throw new ResourceAlreadyExistsException("Email already in use");
+        }
+
+        if (userRepository.existsByMobileNumber(mobileNumber)) {
+            throw new ResourceAlreadyExistsException("Mobile number already in use");
         }
 
         User user = new User();
@@ -92,5 +100,10 @@ public class UserService {
     public User findUserByEmail(String username) {
         return userRepository.findByEmail(username)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+    }
+
+    @Transactional
+    public void deleteByUsername(String username) {
+        refreshTokenRepository.deleteByUsername(username);
     }
 }

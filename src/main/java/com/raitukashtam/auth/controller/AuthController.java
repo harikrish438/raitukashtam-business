@@ -66,7 +66,7 @@ public class AuthController {
         return Map.of("access_token", newAccessToken);
     }
 
-    @PostMapping("/logout")
+    @PostMapping("/invalidateToken")
     public Map<String, String> logout(@RequestHeader("Authorization") String authHeader) {
         String token = authHeader.replace("Bearer ", "");
         DecodedJWT jwt = jwtTokenUtil.validateToken(token);
@@ -76,9 +76,9 @@ public class AuthController {
         revoked.setExpiresAt(jwt.getExpiresAt().toInstant());
         blacklistRepo.save(revoked);
 
-        refreshRepo.deleteByUsername(jwt.getSubject());
+        userService.deleteByUsername(jwt.getSubject());
 
-        return Map.of("message", "Logged out successfully");
+        return Map.of("message", "Access token invalidated");
     }
 }
 
