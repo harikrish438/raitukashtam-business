@@ -1,5 +1,7 @@
 package com.raitukashtam.auth.filter;
 
+import com.auth0.jwt.exceptions.JWTVerificationException;
+import com.auth0.jwt.exceptions.TokenExpiredException;
 import com.auth0.jwt.interfaces.DecodedJWT;
 import com.raitukashtam.auth.jwt.JwtTokenUtil;
 import com.raitukashtam.auth.service.TokenService;
@@ -84,6 +86,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 details.put("remoteAddress", request.getRemoteAddr());
                 auth.setDetails(details);
                 SecurityContextHolder.getContext().setAuthentication(auth);
+            } catch (TokenExpiredException e) {
+                response.setStatus(401);
+                response.getWriter().write("Token expired");
+                return;
+            } catch (JWTVerificationException e) {
+                response.setStatus(401);
+                response.getWriter().write("Invalid token");
+                return;
             } catch (Exception e) {
                 response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                 response.getWriter().write("Invalid token: " + e.getMessage());
@@ -97,6 +107,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String path = request.getServletPath();
             return
                 path.startsWith("/users/register") ||
+                        path.startsWith("/google/verify-token") ||
                 path.startsWith("/token") ||
                 path.equals("/tenants/create");
     }
