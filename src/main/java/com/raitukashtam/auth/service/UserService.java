@@ -106,4 +106,13 @@ public class UserService {
     public void deleteByUsername(String username) {
         refreshTokenRepository.deleteByUsername(username);
     }
+    
+    @Transactional
+    public void updatePassword(UUID userId, String newPassword) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        
+        user.setPassword(passwordEncoder.encode(newPassword));
+        userRepository.save(user);
+    }
 }

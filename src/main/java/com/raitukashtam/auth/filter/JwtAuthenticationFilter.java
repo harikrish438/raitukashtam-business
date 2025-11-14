@@ -108,6 +108,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return
                 path.startsWith("/users/register") ||
                         path.startsWith("/google/verify-token") ||
+                        path.startsWith("/forgot-password") ||
+                        path.startsWith("/reset-password") ||
                 path.startsWith("/token") ||
                 path.equals("/tenants/create");
     }

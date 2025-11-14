@@ -1,7 +1,9 @@
 server:
   port: 8080
+  address: 0.0.0.0  # Listen on all network interfaces
   servlet:
     context-path: /api/auth
+    host: localhost
 
 spring:
   main:
@@ -25,6 +27,19 @@ spring:
       data-source-properties:
         prepareThreshold: 0
         preferQueryMode: simple
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: raitukashtam@gmail.com
+    password: jlmm llbs wgtu hvko
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+          ssl:
+            trust: smtp.gmail.com
   redis:
     host: localhost
     port: 6379
@@ -69,13 +84,16 @@ jwt:
     access-token: Authorization
     refresh-token: X-Refresh-Token
     token-type: Bearer
+# OTP Configuration
 app:
   otp:
     expiry:
       minutes: 10  # OTP expiration time in minutes
+  base-url: http://${server.servlet.host}:${server.port}${server.servlet.context-path}
 
 twofactor:
   api:
     key: 71449fa4-b6b8-11f0-bdde-0200cd936042
+
 google:
   client-id: 120759798903-oahqph6p7fercs91tsef2mnkgk56ajrg.apps.googleusercontent.com

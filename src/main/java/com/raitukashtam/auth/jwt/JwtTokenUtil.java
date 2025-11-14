@@ -4,6 +4,7 @@ import com.auth0.jwt.JWT;
 import com.auth0.jwt.algorithms.Algorithm;
 import com.auth0.jwt.interfaces.DecodedJWT;
 import com.auth0.jwt.interfaces.JWTVerifier;
+import com.auth0.jwt.exceptions.JWTVerificationException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -46,7 +47,7 @@ public class JwtTokenUtil {
                 .withClaim("tenant_code", tenantCode)
                 .withJWTId(UUID.randomUUID().toString())
                 .withIssuedAt(new Date())
-                .withExpiresAt(new Date(System.currentTimeMillis() + refreshExpiration))
+                .withExpiresAt(new Date(System.currentTimeMillis() + accessExpiration))
                 .sign(Algorithm.HMAC256(secret));
     }
 
@@ -55,6 +56,35 @@ public class JwtTokenUtil {
                 .withIssuer(issuer)
                 .build();
         return verifier.verify(token);
+    }
+    
+    public String generatePasswordResetToken(String email) {
+        return JWT.create()
+                .withIssuer(issuer)
+                .withSubject(email)
+                .withClaim("type", "password_reset")
+                .withJWTId(UUID.randomUUID().toString())
+                .withIssuedAt(new Date())
+                .withExpiresAt(new Date(System.currentTimeMillis() + accessExpiration))
+                .sign(Algorithm.HMAC256(secret));
+    }
+    
+    public String getUserIdFromResetToken(String token) {
+        try {
+            DecodedJWT decodedJWT = JWT.require(Algorithm.HMAC256(secret))
+                    .withIssuer(issuer)
+                    .build()
+                    .verify(token);
+                    
+            // Verify this is a password reset token
+            if (!"password_reset".equals(decodedJWT.getClaim("type").asString())) {
+                throw new JWTVerificationException("Invalid token type");
+            }
+            
+            return decodedJWT.getSubject();
+        } catch (JWTVerificationException e) {
+            throw new JWTVerificationException("Invalid or expired reset token");
+        }
     }
 }
 
