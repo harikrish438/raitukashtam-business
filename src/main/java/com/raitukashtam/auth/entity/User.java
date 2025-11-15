@@ -37,9 +37,6 @@ public class User extends BaseEntity {
     @JoinColumn(name = "tenant_code", referencedColumnName = "code", insertable = false, updatable = false)
     private Tenant tenant;
 
-    /*@Column(name = "tenant_code", nullable = false, columnDefinition = "varchar(255) default 'DEFAULT'")
-    private String tenantCode = "DEFAULT";*/
-
     @Column(nullable = false)
     private boolean verified = false; // Default to false
 

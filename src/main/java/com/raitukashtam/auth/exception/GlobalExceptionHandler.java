@@ -2,6 +2,7 @@ package com.raitukashtam.auth.exception;
 
 import org.springframework.http.HttpStatus;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -51,6 +52,27 @@ public class GlobalExceptionHandler {
     public Map<String, Object> handleMethodArgumentNotValid(MethodArgumentNotValidException ex) {
         log.error("Bad request: {}", ex.getMessage());
         return createErrorResponse(ex.getMessage(), HttpStatus.BAD_REQUEST);
+    }
+
+    @ExceptionHandler(UsernameNotFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public Map<String, Object> handleUserNotFound(UsernameNotFoundException ex) {
+        log.error("User not found : {}", ex.getMessage());
+        return createErrorResponse(ex.getMessage(), HttpStatus.NOT_FOUND);
+    }
+
+    @ExceptionHandler(AccountLockedException.class)
+    @ResponseStatus(HttpStatus.FORBIDDEN)
+    public Map<String, Object> handleAccountLocked(AccountLockedException ex) {
+        log.error("User account locked : {}", ex.getMessage());
+        return createErrorResponse(ex.getMessage(), HttpStatus.FORBIDDEN);
+    }
+
+    @ExceptionHandler(TooManyFailedAttemptsException.class)
+    @ResponseStatus(HttpStatus.TOO_MANY_REQUESTS)
+    public Map<String, Object> handleTooManyFailedAttempts(TooManyFailedAttemptsException ex) {
+        log.error("Too many failed attempts : {}", ex.getMessage());
+        return createErrorResponse(ex.getMessage(), HttpStatus.TOO_MANY_REQUESTS);
     }
 
     @ExceptionHandler(Exception.class)
