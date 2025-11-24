@@ -50,8 +50,18 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentNotValidException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Map<String, Object> handleMethodArgumentNotValid(MethodArgumentNotValidException ex) {
-        log.error("Bad request: {}", ex.getMessage());
-        return createErrorResponse(ex.getMessage(), HttpStatus.BAD_REQUEST);
+        log.error("Validation error: {}", ex.getMessage());
+        Map<String, Object> response = createErrorResponse("Validation failed", HttpStatus.BAD_REQUEST);
+        // Get all field errors
+        Map<String, String> errors = new HashMap<>();
+        ex.getBindingResult().getFieldErrors().forEach(error -> {
+            String fieldName = error.getField();
+            String errorMessage = error.getDefaultMessage();
+            errors.put(fieldName, errorMessage);
+        });
+        
+        response.put("errors", errors);
+        return response;
     }
 
     @ExceptionHandler(UsernameNotFoundException.class)

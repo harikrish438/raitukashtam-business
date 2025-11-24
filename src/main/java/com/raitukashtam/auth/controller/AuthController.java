@@ -11,10 +11,12 @@ import com.raitukashtam.auth.exception.TooManyFailedAttemptsException;
 import com.raitukashtam.auth.jwt.JwtTokenUtil;
 import com.raitukashtam.auth.repository.RefreshTokenRepository;
 import com.raitukashtam.auth.repository.TokenBlackListRepository;
+import com.raitukashtam.auth.request.LoginRequest;
 import com.raitukashtam.auth.service.LoginAttemptService;
 import com.raitukashtam.auth.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
@@ -39,10 +41,10 @@ public class AuthController {
 
     @PostMapping("/token")
     public Object login(
-            @RequestParam String username,
-            @RequestParam String password,
-            @RequestParam(required = false) String recaptchaToken,
-            HttpServletRequest request) {
+            @RequestBody @Validated LoginRequest loginRequest, HttpServletRequest request) {
+        String username = loginRequest.getUsername();
+        String password = loginRequest.getPassword();
+        String recaptchaToken = loginRequest.getRecaptchaToken();
         
         try {
             // Check if reCAPTCHA verification is needed
