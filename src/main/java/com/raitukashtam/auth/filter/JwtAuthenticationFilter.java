@@ -30,11 +30,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     @Autowired
     private TokenService tokenService;
 
-    /*public JwtAuthenticationFilter(JwtTokenUtil jwtTokenUtil, TokenService tokenService) {
-        this.jwtTokenUtil = jwtTokenUtil;
-        this.tokenService = tokenService;
-    }*/
-
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
@@ -113,6 +108,4 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 path.startsWith("/token") ||
                 path.equals("/tenants/create");
     }
-
-
 }

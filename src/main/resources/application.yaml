@@ -97,3 +97,7 @@ twofactor:
 
 google:
   client-id: 120759798903-oahqph6p7fercs91tsef2mnkgk56ajrg.apps.googleusercontent.com
+  recaptcha:
+    site-key: 6LcWPQ0sAAAAANzoMUJlJsVQKplit_7P80nCxoN-
+    secret-key: 6LcWPQ0sAAAAAE3w6Um2wA96-80_2n0rvb0cOqWy
+    verify-url: https://www.google.com/recaptcha/api/siteverify

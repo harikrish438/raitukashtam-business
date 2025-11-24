@@ -99,7 +99,7 @@ public class UserService {
 
     public User findUserByEmail(String username) {
         return userRepository.findByEmail(username)
-                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+                .orElseThrow(() -> new UsernameNotFoundException("Invalid username or password"));
     }
 
     @Transactional
@@ -110,7 +110,7 @@ public class UserService {
     @Transactional
     public void updatePassword(UUID userId, String newPassword) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Invalid username or password"));
         
         user.setPassword(passwordEncoder.encode(newPassword));
         userRepository.save(user);

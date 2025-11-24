@@ -4,15 +4,20 @@ import com.raitukashtam.auth.config.LoginSecurityConfig;
 import com.raitukashtam.auth.entity.LoginAttempt;
 import com.raitukashtam.auth.entity.User;
 import com.raitukashtam.auth.exception.AccountLockedException;
+import com.raitukashtam.auth.exception.CaptchaRequiredException;
 import com.raitukashtam.auth.exception.TooManyFailedAttemptsException;
 import com.raitukashtam.auth.repository.LoginAttemptRepository;
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.HashMap;
+import java.util.Map;
 
 @Slf4j
 @Service
@@ -21,6 +26,13 @@ public class LoginAttemptService {
     private final LoginAttemptRepository loginAttemptRepository;
     private final LoginSecurityConfig securityConfig;
     private final UserService userService;
+    private final RecaptchaService recaptchaService;
+    
+    @Getter
+    @Value("${google.recaptcha.site-key}")
+    private String recaptchaSiteKey;
+    
+    private static final int CAPTCHA_REQUIRED_AFTER_ATTEMPTS = 3;
 
     @Transactional
     public void loginSucceeded(String email, HttpServletRequest request) {
@@ -46,24 +58,43 @@ public class LoginAttemptService {
     }
 
     @Transactional(readOnly = true)
-    public void checkLoginAttempts(String email) {
+    public Map<String, Object> checkLoginAttempts(String email, String recaptchaToken) {
         User user = userService.findUserByEmail(email);
+        // Check for too many failed attempts
+        Instant windowStart = Instant.now().minus(securityConfig.getFailureWindow());
+        int failedAttempts = loginAttemptRepository.countFailedAttemptsSince(user, windowStart);
         
-        // Check if account is locked
+        /*// Check if account is locked
         loginAttemptRepository.findLastLoginAttempt(user).ifPresent(lastAttempt -> {
             if (!lastAttempt.isSuccessful() && isAccountLocked(user)) {
                 Instant unlockTime = lastAttempt.getAttemptTime().plus(securityConfig.getLockoutDuration());
                 throw new AccountLockedException("Account is locked. Please try again after " + unlockTime);
             }
-        });
+        });*/
 
-        // Check for too many failed attempts
-        Instant windowStart = Instant.now().minus(securityConfig.getFailureWindow());
-        int failedAttempts = loginAttemptRepository.countFailedAttemptsSince(user, windowStart);
+
+        
+        // If this is the 4th or later attempt, require reCAPTCHA
+        if (failedAttempts >= CAPTCHA_REQUIRED_AFTER_ATTEMPTS) {
+            if (recaptchaToken == null || recaptchaToken.isEmpty()) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("requiresCaptcha", true);
+                response.put("siteKey", getRecaptchaSiteKey());
+                response.put("message", "Please complete the reCAPTCHA verification");
+                return response;
+            }
+            
+            // Verify reCAPTCHA token
+            if (!recaptchaService.verifyRecaptcha(recaptchaToken)) {
+                throw new CaptchaRequiredException("Invalid reCAPTCHA verification. Please try again.");
+            }
+        }
         
         if (failedAttempts >= securityConfig.getMaxAttempts()) {
             throw new TooManyFailedAttemptsException("Too many failed login attempts. Please try again later.");
         }
+        
+        return null;
     }
 
     private boolean isAccountLocked(User user) {
@@ -76,7 +107,13 @@ public class LoginAttemptService {
             })
             .orElse(false);
     }
-
+    
+    public boolean isCaptchaRequired(User user) {
+        Instant windowStart = Instant.now().minus(securityConfig.getFailureWindow());
+        int failedAttempts = loginAttemptRepository.countFailedAttemptsSince(user, windowStart);
+        return failedAttempts >= CAPTCHA_REQUIRED_AFTER_ATTEMPTS;
+    }
+    
     private String getClientIP(HttpServletRequest request) {
         String xfHeader = request.getHeader("X-Forwarded-For");
         if (xfHeader != null) {

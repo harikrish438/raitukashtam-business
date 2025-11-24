@@ -6,6 +6,7 @@ import com.raitukashtam.auth.entity.RevokedToken;
 import com.raitukashtam.auth.entity.User;
 import com.raitukashtam.auth.exception.AccountLockedException;
 import com.raitukashtam.auth.exception.AuthenticationException;
+import com.raitukashtam.auth.exception.CaptchaRequiredException;
 import com.raitukashtam.auth.exception.TooManyFailedAttemptsException;
 import com.raitukashtam.auth.jwt.JwtTokenUtil;
 import com.raitukashtam.auth.repository.RefreshTokenRepository;
@@ -17,6 +18,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.Map;
 
 @RestController
@@ -36,13 +38,23 @@ public class AuthController {
     private LoginAttemptService loginAttemptService;
 
     @PostMapping("/token")
-    public Map<String, String> login(@RequestParam String username,
-                                     @RequestParam String password, HttpServletRequest request) {
+    public Object login(
+            @RequestParam String username,
+            @RequestParam String password,
+            @RequestParam(required = false) String recaptchaToken,
+            HttpServletRequest request) {
+        
         try {
-            loginAttemptService.checkLoginAttempts(username);
+            // Check if reCAPTCHA verification is needed
+            Map<String, Object> captchaResponse = loginAttemptService.checkLoginAttempts(username, recaptchaToken);
+            if (captchaResponse != null) {
+                return captchaResponse; // Returns reCAPTCHA required response
+            }
+            
             // Authenticate user
             User user = userService.authenticate(username, password);
             loginAttemptService.loginSucceeded(username, request);
+            
             String accessToken = jwtTokenUtil.generateAccessToken(username, user.getRole().name(), user.getTenant().getCode());
             String refreshToken = jwtTokenUtil.generateRefreshToken(username, user.getRole().name(), user.getTenant().getCode());
 
@@ -53,19 +65,32 @@ public class AuthController {
             refreshRepo.save(rt);
 
             return Map.of(
-                    "access_token", accessToken,
-                    "refresh_token", refreshToken
+                "access_token", accessToken,
+                "refresh_token", refreshToken
             );
+            
         } catch (AuthenticationException e) {
             loginAttemptService.loginFailed(username, "Invalid credentials", request);
+            
+            // Check if we need to return reCAPTCHA for the next attempt
+            User user = userService.findUserByEmail(username);
+            if (loginAttemptService.isCaptchaRequired(user)) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("requiresCaptcha", true);
+                response.put("siteKey", loginAttemptService.getRecaptchaSiteKey());
+                response.put("message", "Please complete the reCAPTCHA verification");
+                return response;
+            }
+            
             throw e;
-        } catch (AccountLockedException | TooManyFailedAttemptsException e) {
+            
+        } catch (AccountLockedException | TooManyFailedAttemptsException | CaptchaRequiredException e) {
             throw e;
+            
         } catch (Exception e) {
             loginAttemptService.loginFailed(username, "Unexpected error: " + e.getMessage(), request);
             throw e;
         }
-
     }
 
     @PostMapping("/refresh")
