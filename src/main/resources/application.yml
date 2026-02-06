@@ -1,0 +1,57 @@
+server:
+  port: 8081
+  address: 0.0.0.0  # Listen on all network interfaces
+
+spring:
+  tracing:
+    propagation:
+      type: w3c
+    zipkin:
+      endpoint: http://localhost:9411/api/v2/spans
+  config:
+    import: "optional:configserver:CONFIG-SERVER-SERVICE"
+  main:
+    time-zone: Asia/Kolkata
+  application:
+    name: product-service
+  datasource:
+    url: jdbc:postgresql://localhost:5433/product-service-db?currentSchema=public&stringtype=unspecified&TimeZone=Asia/Kolkata
+    username: product-service-user
+    password: product-service-password
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      connection-timeout: 30000
+      maximum-pool-size: 10
+      minimum-idle: 2
+      idle-timeout: 30000
+      max-lifetime: 120000
+      connection-init-sql: |
+        SET TIME ZONE 'Asia/Kolkata';
+        SET timezone = 'Asia/Kolkata';
+      data-source-properties:
+        prepareThreshold: 0
+        preferQueryMode: simple
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          time_zone: Asia/Kolkata
+    show-sql: true
+
+management:
+  tracing:
+    enabled: true
+    sampling:
+      probability: 1.0   # 100% sampling, adjust in production
+
+
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSS+05:30} %5p [traceId=%X{traceId:-}, spanId=%X{spanId:-}] %thread --- [%t] %-40.40logger{39} : %m%n"
+  level:
+    org.springframework.web: DEBUG
+    io.micrometer.tracing: DEBUG
+    org.springframework.boot.actuate.tracing: DEBUG
