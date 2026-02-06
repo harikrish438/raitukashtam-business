@@ -11,13 +11,10 @@ import java.util.UUID;
 @Setter
 @Getter
 @Entity
-@Table(name = "refresh_tokens")
 public class RefreshToken {
     @Id
-    @GeneratedValue(generator = "uuid2")
-    @GenericGenerator(name = "uuid2", strategy = "uuid2")
-    @Column(columnDefinition = "UUID")
-    private String id; // opaque token id (UUID string)
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
 
     @Column(nullable = false)
     private String username;
@@ -34,7 +31,7 @@ public class RefreshToken {
     public RefreshToken() {}
 
     public RefreshToken(String username, Instant expiresAt) {
-        this.id = UUID.randomUUID().toString();
+        //this.id = UUID.randomUUID().toString();
         this.username = username;
         this.expiryTime = expiresAt;
     }

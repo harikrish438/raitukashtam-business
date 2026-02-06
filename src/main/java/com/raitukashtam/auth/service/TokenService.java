@@ -70,7 +70,7 @@ public class TokenService {
 
         return Map.of(
                 "access_token", accessToken,
-                "refresh_token", refreshToken.getId(),
+                "refresh_token", String.valueOf(refreshToken.getId()),
                 "token_type", "Bearer",
                 "expires_in", String.valueOf(accessTokenExpMs / 1000)
         );
@@ -110,7 +110,7 @@ public class TokenService {
 
         return Optional.of(Map.of(
                 "access_token", accessToken,
-                "refresh_token", newRefresh.getId(),
+                "refresh_token", String.valueOf(newRefresh.getId()),
                 "token_type", "Bearer",
                 "expires_in", String.valueOf(accessTokenExpMs / 1000)
         ));

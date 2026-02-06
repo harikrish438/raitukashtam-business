@@ -11,11 +11,6 @@ import org.springframework.web.client.RestTemplate;
 public class RecaptchaConfig {
     
     @Bean
-    public RestTemplate restTemplate() {
-        return new RestTemplate();
-    }
-    
-    @Bean
     @ConfigurationProperties(prefix = "google.recaptcha")
     public RecaptchaProperties recaptchaProperties() {
         return new RecaptchaProperties();

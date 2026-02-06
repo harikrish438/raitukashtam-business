@@ -2,10 +2,17 @@ server:
   port: 8080
   address: 0.0.0.0  # Listen on all network interfaces
   servlet:
-    context-path: /api/auth
+    context-path: /
     host: localhost
 
 spring:
+  tracing:
+    propagation:
+      type: w3c
+    zipkin:
+      endpoint: http://localhost:9411/api/v2/spans
+  config:
+    import: "optional:configserver:CONFIG-SERVER-SERVICE"
   main:
     time-zone: Asia/Kolkata
   application:
@@ -101,3 +108,17 @@ google:
     site-key: 6LcWPQ0sAAAAANzoMUJlJsVQKplit_7P80nCxoN-
     secret-key: 6LcWPQ0sAAAAAE3w6Um2wA96-80_2n0rvb0cOqWy
     verify-url: https://www.google.com/recaptcha/api/siteverify
+
+management:
+  tracing:
+    enabled: true
+    sampling:
+      probability: 1.0   # 100% sampling, adjust in production
+
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSS+05:30} %5p [traceId=%X{traceId:-}, spanId=%X{spanId:-}] %thread --- [%t] %-40.40logger{39} : %m%n"
+  level:
+    org.springframework.web: DEBUG
+    io.micrometer.tracing: DEBUG
+    org.springframework.boot.actuate.tracing: DEBUG

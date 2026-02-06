@@ -9,13 +9,12 @@ import java.util.UUID;
 
 @EqualsAndHashCode(callSuper = true)
 @Entity
-@Table(name = "users")
+@Table(name = "app_user")
 @Data
 public class User extends BaseEntity {
     @Id
-    @GeneratedValue
-    @UuidGenerator
-    private UUID id;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
 
     @Column(unique = true, nullable = false)
     private String email;
@@ -34,7 +33,7 @@ public class User extends BaseEntity {
     private UserRole role = UserRole.CONSUMER; // Default role
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "tenant_code", referencedColumnName = "code", insertable = false, updatable = false)
+    @JoinColumn(name = "tenant_code", referencedColumnName = "code")
     private Tenant tenant;
 
     @Column(nullable = false)

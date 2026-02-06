@@ -59,6 +59,7 @@ public class UserService {
         user.setFirstName(firstName);
         user.setLastName(lastName);
         user.setMobileNumber(mobileNumber);
+        user.setTenant(tenantRepository.findByCode(tenantCode).orElse(null));
         user.setCreatedBy(email);
 
         return userRepository.save(user);
@@ -66,7 +67,7 @@ public class UserService {
 
     // Add this method to fetch user with tenant
     @Transactional(readOnly = true)
-    public User getUserWithTenant(UUID userId) {
+    public User getUserWithTenant(Long userId) {
         return userRepository.findById(userId)
                 .map(user -> {
                     // Initialize the proxy to load tenant
@@ -78,7 +79,7 @@ public class UserService {
 
     // In your service
     @Transactional(readOnly = true)
-    public UserResponse getUserWithTenantInfo(UUID userId) {
+    public UserResponse getUserWithTenantInfo(Long userId) {
         User user = userRepository.findWithTenantById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
@@ -108,11 +109,24 @@ public class UserService {
     }
     
     @Transactional
-    public void updatePassword(UUID userId, String newPassword) {
+    public void updatePassword(Long userId, String newPassword) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Invalid username or password"));
         
         user.setPassword(passwordEncoder.encode(newPassword));
         userRepository.save(user);
+    }
+    
+    @Transactional(readOnly = true)
+    public UserResponse getUserById(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
+                
+        // Initialize the tenant proxy to avoid LazyInitializationException
+        if (user.getTenant() != null) {
+            user.getTenant().getCode();
+        }
+        
+        return modelMapper.map(user, UserResponse.class);
     }
 }

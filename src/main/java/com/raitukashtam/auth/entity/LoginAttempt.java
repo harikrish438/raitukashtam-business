@@ -10,7 +10,6 @@ import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(name = "login_attempts")
 @Getter
 @Setter
 public class LoginAttempt extends BaseEntity {
