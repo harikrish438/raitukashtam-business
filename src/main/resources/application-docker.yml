@@ -1,26 +1,19 @@
 server:
   port: 8081
-  address: 0.0.0.0  # Listen on all network interfaces
+  address: 0.0.0.0
 
 spring:
-  tracing:
-    propagation:
-      type: w3c
-    zipkin:
-      endpoint: http://localhost:9411/api/v2/spans
-  config:
-    import: "optional:configserver:CONFIG-SERVER-SERVICE"
-  main:
-    time-zone: Asia/Kolkata
   application:
     name: product-service
+  config:
+    import: "optional:configserver:http://config-server-service:9002"
   cloud:
     compatibility-verifier:
       enabled: false
     discovery:
       enabled: true
   datasource:
-    url: jdbc:postgresql://localhost:5433/product-service-db?currentSchema=public&stringtype=unspecified&TimeZone=Asia/Kolkata
+    url: jdbc:postgresql://product-postgres:5432/product-service-db?currentSchema=public&stringtype=unspecified&TimeZone=Asia/Kolkata
     username: product-service-user
     password: product-service-password
     driver-class-name: org.postgresql.Driver
@@ -62,16 +55,17 @@ eureka:
     appname: product-service
 
 management:
-  tracing:
-    enabled: true
-    sampling:
-      probability: 1.0   # 100% sampling, adjust in production
-
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+  server:
+    port: 8081
 
 logging:
-  pattern:
-    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSS+05:30} %5p [traceId=%X{traceId:-}, spanId=%X{spanId:-}] %thread --- [%t] %-40.40logger{39} : %m%n"
   level:
-    org.springframework.web: DEBUG
-    io.micrometer.tracing: DEBUG
-    org.springframework.boot.actuate.tracing: DEBUG
+    org.springframework.cloud: DEBUG
+    com.netflix.eureka: DEBUG

@@ -61,12 +61,12 @@ public class ProductService {
         
         // Set up headers with Authorization
         HttpHeaders headers = new HttpHeaders();
-        headers.set("Authorization", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJyYWl0dWthc2h0YW0tYXV0aC1zZXJ2aWNlIiwic3ViIjoidGVzdDNAZ21haWwuY29tIiwicm9sZSI6IkNPTlNVTUVSIiwidGVuYW50X2NvZGUiOiJURU5BTlQiLCJqdGkiOiJhMmJiZjU5YS0zNzQ1LTRhMjItYTVjYS00ZjAyZWQyMzEzYTMiLCJpYXQiOjE3NzAzNDEwMTksImV4cCI6MTc3MDM0MTkxOX0.i8y6OwY3M7eihKnluXS3yF5i3DccvtvIA4yrMbo_R28");
+        headers.set("Authorization", "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJyYWl0dWthc2h0YW0tYXV0aC1zZXJ2aWNlIiwic3ViIjoidGVzdDNAZ21haWwuY29tIiwicm9sZSI6IkNPTlNVTUVSIiwidGVuYW50X2NvZGUiOiJURU5BTlQiLCJqdGkiOiI0MGJkM2UxYy0yODRjLTQ0MzItOGYyZi1jMjhlYzA4YmFiYzEiLCJpYXQiOjE3NzU1MzA4ODksImV4cCI6MTc3NTUzMTc4OX0.gLXXMvi4AyZTzMjLBbTf4LWqcnaGWIZ6vPXLSN7vfUI");
         HttpEntity<String> entity = new HttpEntity<>(headers);
         
         // Make the request with headers using service discovery
         ResponseEntity<User> response = restTemplate.exchange(
-            "http://AUTH-SERVICE/users/" + product.getUserId(),
+            "http://auth-service/users/" + product.getUserId(),
             HttpMethod.GET,
             entity,
             User.class
