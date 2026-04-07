@@ -94,6 +94,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 response.getWriter().write("Invalid token: " + e.getMessage());
                 return;
             }
+        } else {
+            response.setStatus(401);
+            response.getWriter().write("Invalid token");
+            return;
         }
         filterChain.doFilter(request, response);
     }

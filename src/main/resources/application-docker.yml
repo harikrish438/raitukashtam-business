@@ -1,0 +1,101 @@
+server:
+  port: 8080
+  address: 0.0.0.0
+  servlet:
+    context-path: /
+
+spring:
+  application:
+    name: auth-service
+  config:
+    import: "optional:configserver:http://config-server-service:9002"
+  cloud:
+    compatibility-verifier:
+      enabled: false
+    discovery:
+      enabled: true
+  datasource:
+    url: jdbc:postgresql://auth-postgres:5432/jwt_auth_db?currentSchema=public&stringtype=unspecified&TimeZone=Asia/Kolkata
+    username: jwt_user
+    password: jwt_password
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      connection-timeout: 30000
+      maximum-pool-size: 10
+      minimum-idle: 2
+      idle-timeout: 30000
+      max-lifetime: 120000
+      connection-init-sql: |
+        SET TIME ZONE 'Asia/Kolkata';
+        SET timezone = 'Asia/Kolkata';
+      data-source-properties:
+        prepareThreshold: 0
+        preferQueryMode: simple
+  redis:
+    host: redis
+    port: 6379
+    password: your_redis_password
+  session:
+    store-type: redis
+    redis:
+      flush-mode: on_save
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          time_zone: Asia/Kolkata
+    show-sql: true
+
+eureka:
+  client:
+    register-with-eureka: true
+    fetch-registry: true
+    service-url:
+      default-zone: http://discovery-service:8761/eureka/
+    enabled: true
+    registry-fetch-interval-seconds: 30
+  instance:
+    hostname: auth-service
+    prefer-ip-address: true
+    lease-renewal-interval-in-seconds: 30
+    lease-expiration-duration-in-seconds: 90
+    appname: auth-service
+
+jwt:
+  secret: my-super-secret-key-please-change-this-in-production
+  issuer: raitukashtam-auth-service
+  access-token-exp-ms: 900000
+  refresh-token-exp-ms: 604800000
+  access-expiration: 900000
+  refresh-expiration: 604800000
+  clock-skew: 60
+  audience: raitukashtam-client
+  header-names:
+    access-token: Authorization
+    refresh-token: X-Refresh-Token
+    token-type: Bearer
+
+app:
+  otp:
+    expiry:
+      minutes: 10
+  base-url: http://auth-service:8080/
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+  server:
+    port: 8080
+
+logging:
+  level:
+    org.springframework.security: DEBUG
+    org.springframework.web: DEBUG
