@@ -65,11 +65,11 @@ eureka:
     appname: auth-service
 
 jwt:
-  secret: my-super-secret-key-please-change-this-in-production
-  issuer: raitukashtam-auth-service
-  access-token-exp-ms: 900000
+  secret: your-secret-key-change-this-in-production
+  issuer: raitukashtam
+  access-token-exp-ms: 3600000
   refresh-token-exp-ms: 604800000
-  access-expiration: 900000
+  access-expiration: 3600000
   refresh-expiration: 604800000
   clock-skew: 60
   audience: raitukashtam-client

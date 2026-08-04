@@ -1,15 +1,8 @@
 package com.raitukashtam.auth.jwt;
 
-import com.auth0.jwt.JWT;
-import com.auth0.jwt.algorithms.Algorithm;
 import com.auth0.jwt.interfaces.DecodedJWT;
-import com.auth0.jwt.interfaces.JWTVerifier;
-import com.auth0.jwt.exceptions.JWTVerificationException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
-
-import java.util.Date;
-import java.util.UUID;
 
 @Component
 public class JwtTokenUtil {
@@ -26,65 +19,28 @@ public class JwtTokenUtil {
     @Value("${jwt.refresh-expiration}")
     private long refreshExpiration;
 
+    private com.raitukashtam.jwt.JwtTokenUtil getLibraryUtil() {
+        return new com.raitukashtam.jwt.JwtTokenUtil(secret, issuer, accessExpiration, refreshExpiration);
+    }
+
     public String generateAccessToken(String username, String role, String tenantCode) {
-        return JWT.create()
-                .withIssuer(issuer)
-                .withSubject(username)
-                .withClaim("role", role)
-                .withClaim("tenant_code", tenantCode)
-                .withJWTId(UUID.randomUUID().toString())  // Add JWT ID
-                .withIssuedAt(new Date())
-                .withExpiresAt(new Date(System.currentTimeMillis() + accessExpiration))
-                .sign(Algorithm.HMAC256(secret));
+        return getLibraryUtil().generateAccessToken(username, role, tenantCode);
     }
 
     public String generateRefreshToken(String username, String role, String tenantCode) {
-        return JWT.create()
-                .withIssuer(issuer)
-                .withSubject(username)
-                .withClaim("type", "refresh")
-                .withClaim("role", role)
-                .withClaim("tenant_code", tenantCode)
-                .withJWTId(UUID.randomUUID().toString())
-                .withIssuedAt(new Date())
-                .withExpiresAt(new Date(System.currentTimeMillis() + accessExpiration))
-                .sign(Algorithm.HMAC256(secret));
+        return getLibraryUtil().generateRefreshToken(username, role, tenantCode);
     }
 
     public DecodedJWT validateToken(String token) {
-        JWTVerifier verifier = JWT.require(Algorithm.HMAC256(secret))
-                .withIssuer(issuer)
-                .build();
-        return verifier.verify(token);
+        return getLibraryUtil().validateToken(token);
     }
-    
+
     public String generatePasswordResetToken(String email) {
-        return JWT.create()
-                .withIssuer(issuer)
-                .withSubject(email)
-                .withClaim("type", "password_reset")
-                .withJWTId(UUID.randomUUID().toString())
-                .withIssuedAt(new Date())
-                .withExpiresAt(new Date(System.currentTimeMillis() + accessExpiration))
-                .sign(Algorithm.HMAC256(secret));
+        return getLibraryUtil().generatePasswordResetToken(email);
     }
-    
+
     public String getUserIdFromResetToken(String token) {
-        try {
-            DecodedJWT decodedJWT = JWT.require(Algorithm.HMAC256(secret))
-                    .withIssuer(issuer)
-                    .build()
-                    .verify(token);
-                    
-            // Verify this is a password reset token
-            if (!"password_reset".equals(decodedJWT.getClaim("type").asString())) {
-                throw new JWTVerificationException("Invalid token type");
-            }
-            
-            return decodedJWT.getSubject();
-        } catch (JWTVerificationException e) {
-            throw new JWTVerificationException("Invalid or expired reset token");
-        }
+        return getLibraryUtil().getUserIdFromResetToken(token);
     }
 }
 

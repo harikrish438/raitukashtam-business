@@ -71,13 +71,13 @@ spring:
 
 jwt:
   # JWT Configuration
-  secret: my-super-secret-key-please-change-this-in-production
-  issuer: raitukashtam-auth-service
+  secret: your-secret-key-change-this-in-production
+  issuer: raitukashtam
   
   # Token expiration times in milliseconds
-  access-token-exp-ms: 900000        # 15 minutes
+  access-token-exp-ms: 3600000       # 1 hour
   refresh-token-exp-ms: 604800000    # 7 days
-  access-expiration: 900000          # Alias for backward compatibility
+  access-expiration: 3600000         # Alias for backward compatibility
   refresh-expiration: 604800000      # Alias for backward compatibility
   
   # Token validation settings
