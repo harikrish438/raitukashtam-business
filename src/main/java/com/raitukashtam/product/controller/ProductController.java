@@ -8,6 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import jakarta.servlet.http.HttpServletRequest;
 
 @RestController
 @RequestMapping("/api/v1/products")
@@ -23,8 +24,8 @@ public class ProductController {
     }
 
     @GetMapping("/{productId}")
-    public ResponseTemplateVO getProductWithUser(@PathVariable("productId") Long productId) {
+    public ResponseTemplateVO getProductWithUser(@PathVariable("productId") Long productId, HttpServletRequest request) {
         log.info("Inside getProductWithUser method of ProductController");
-        return productService.getProductWithUser(productId);
+        return productService.getProductWithUser(productId, request);
     }
 }

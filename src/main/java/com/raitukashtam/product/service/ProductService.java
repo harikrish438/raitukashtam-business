@@ -18,6 +18,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
+import jakarta.servlet.http.HttpServletRequest;
 
 @Service
 @Slf4j
@@ -52,16 +53,22 @@ public class ProductService {
         }
     }
 
-    public ResponseTemplateVO getProductWithUser(Long productId) {
+    public ResponseTemplateVO getProductWithUser(Long productId, HttpServletRequest request) {
         log.info("Inside getProductWithUser method of ProductService class");
         
         // Find product or throw exception if not found
         Product product = productRepository.findById(productId)
             .orElseThrow(() -> new ResourceNotFoundException("Product not found with id: " + productId));
         
-        // Set up headers with Authorization
+        // Extract Authorization header from incoming request
+        String authorizationHeader = request.getHeader("Authorization");
+        if (authorizationHeader == null || authorizationHeader.isEmpty()) {
+            throw new RuntimeException("Authorization header is missing");
+        }
+        
+        // Set up headers with Authorization from request
         HttpHeaders headers = new HttpHeaders();
-        headers.set("Authorization", "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJyYWl0dWthc2h0YW0tYXV0aC1zZXJ2aWNlIiwic3ViIjoidGVzdDNAZ21haWwuY29tIiwicm9sZSI6IkNPTlNVTUVSIiwidGVuYW50X2NvZGUiOiJURU5BTlQiLCJqdGkiOiI0MGJkM2UxYy0yODRjLTQ0MzItOGYyZi1jMjhlYzA4YmFiYzEiLCJpYXQiOjE3NzU1MzA4ODksImV4cCI6MTc3NTUzMTc4OX0.gLXXMvi4AyZTzMjLBbTf4LWqcnaGWIZ6vPXLSN7vfUI");
+        headers.set("Authorization", authorizationHeader);
         HttpEntity<String> entity = new HttpEntity<>(headers);
         
         // Make the request with headers using service discovery

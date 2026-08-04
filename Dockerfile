@@ -2,13 +2,17 @@
 FROM maven:3.9.6-eclipse-temurin-21-alpine AS build
 WORKDIR /app
 
+# Copy and build jwt-library first
+COPY jwt-library ./jwt-library
+RUN cd jwt-library && mvn clean install -DskipTests
+
 # Copy only the files needed to download dependencies
-COPY pom.xml .
+COPY product-service/pom.xml .
 # Download dependencies
 RUN mvn dependency:go-offline -B
 
 # Copy source code
-COPY src ./src
+COPY product-service/src ./src
 
 # Build the application
 RUN mvn package -DskipTests

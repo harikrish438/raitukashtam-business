@@ -67,6 +67,11 @@ management:
     sampling:
       probability: 1.0   # 100% sampling, adjust in production
 
+jwt:
+  secret: your-secret-key-change-this-in-production
+  issuer: raitukashtam
+  access-expiration: 3600000  # 1 hour in milliseconds
+  refresh-expiration: 604800000  # 7 days in milliseconds
 
 logging:
   pattern:
