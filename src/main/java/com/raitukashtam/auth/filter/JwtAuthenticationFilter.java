@@ -105,6 +105,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private boolean isPublicEndpoint(HttpServletRequest request) {
         String path = request.getServletPath();
             return
+                path.startsWith("/actuator") ||
                 path.startsWith("/users/register") ||
                         path.startsWith("/google/verify-token") ||
                         path.startsWith("/forgot-password") ||

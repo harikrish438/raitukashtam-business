@@ -94,6 +94,9 @@ management:
       show-details: always
   server:
     port: 8080
+  health:
+    redis:
+      enabled: false
 
 logging:
   level:

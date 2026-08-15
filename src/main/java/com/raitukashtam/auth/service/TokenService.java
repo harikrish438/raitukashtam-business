@@ -65,7 +65,7 @@ public class TokenService {
                 .sign(hmac);
 
         Instant refreshExp = now.plusMillis(refreshTokenExpMs);
-        RefreshToken refreshToken = new RefreshToken(username, refreshExp);
+        RefreshToken refreshToken = new RefreshToken(username, role, refreshExp);
         refreshTokenRepository.save(refreshToken);
 
         return Map.of(
@@ -92,7 +92,7 @@ public class TokenService {
         refreshTokenRepository.save(dbToken);
 
         // new refresh token
-        RefreshToken newRefresh = new RefreshToken(dbToken.getUsername(), Instant.now().plusMillis(refreshTokenExpMs));
+        RefreshToken newRefresh = new RefreshToken(dbToken.getUsername(), dbToken.getRole(), Instant.now().plusMillis(refreshTokenExpMs));
         refreshTokenRepository.save(newRefresh);
 
         // new access token
@@ -103,6 +103,7 @@ public class TokenService {
         String accessToken = JWT.create()
                 .withIssuer(issuer)
                 .withSubject(dbToken.getUsername())
+                .withClaim("role", dbToken.getRole())
                 .withIssuedAt(Date.from(now))
                 .withExpiresAt(Date.from(accessExp))
                 .withJWTId(newAccessTokenJti)

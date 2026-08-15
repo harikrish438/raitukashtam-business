@@ -19,6 +19,9 @@ public class RefreshToken {
     @Column(nullable = false)
     private String username;
 
+    @Column(nullable = true)
+    private String role;
+
     @Column(nullable = false)
     private Instant expiryTime;
 
@@ -30,9 +33,10 @@ public class RefreshToken {
 
     public RefreshToken() {}
 
-    public RefreshToken(String username, Instant expiresAt) {
+    public RefreshToken(String username, String role, Instant expiresAt) {
         //this.id = UUID.randomUUID().toString();
         this.username = username;
+        this.role = role;
         this.expiryTime = expiresAt;
     }
 }
