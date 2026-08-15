@@ -32,7 +32,6 @@ spring:
       max-lifetime: 120000
       connection-init-sql: |
         SET TIME ZONE 'Asia/Kolkata';
-        SET timezone = 'Asia/Kolkata';
       data-source-properties:
         prepareThreshold: 0
         preferQueryMode: simple

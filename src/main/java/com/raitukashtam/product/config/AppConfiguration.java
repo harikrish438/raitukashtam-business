@@ -19,10 +19,4 @@ public class AppConfiguration {
         TypeMap<Product, ProductResponse> productToProductResponse = modelMapper.createTypeMap(Product.class, ProductResponse.class);
         return modelMapper;
     }
-    
-    /*@Bean
-    @LoadBalanced
-    public RestTemplate restTemplate() {
-        return new RestTemplate();
-    }*/
 }

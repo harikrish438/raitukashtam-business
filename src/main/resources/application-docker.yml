@@ -69,3 +69,11 @@ logging:
   level:
     org.springframework.cloud: DEBUG
     com.netflix.eureka: DEBUG
+    com.raitukashtam.jwt.filter: DEBUG
+    org.springframework.web: DEBUG
+
+jwt:
+  secret: your-secret-key-change-this-in-production
+  issuer: raitukashtam
+  access-expiration: 3600000  # 1 hour in milliseconds
+  refresh-expiration: 604800000  # 7 days in milliseconds
