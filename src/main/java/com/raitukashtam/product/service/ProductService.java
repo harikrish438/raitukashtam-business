@@ -11,6 +11,7 @@ import com.raitukashtam.product.vo.User;
 import lombok.extern.slf4j.Slf4j;
 import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpMethod;
@@ -31,6 +32,9 @@ public class ProductService {
 
     @Autowired
     private RestTemplate restTemplate;
+
+    @Value("${auth.service.url}")
+    private String authServiceUrl;
 
     @Transactional
     public ProductResponse save(ProductRequest request) {
@@ -71,9 +75,11 @@ public class ProductService {
         headers.set("Authorization", authorizationHeader);
         HttpEntity<String> entity = new HttpEntity<>(headers);
         
-        // Make the request with headers using service discovery
+        // Make the request with headers using configurable auth service URL
+        String authUrl = authServiceUrl + "/users/" + product.getUserId();
+        log.info("Calling auth service at: {}", authUrl);
         ResponseEntity<User> response = restTemplate.exchange(
-            "http://auth-service/users/" + product.getUserId(),
+            authUrl,
             HttpMethod.GET,
             entity,
             User.class

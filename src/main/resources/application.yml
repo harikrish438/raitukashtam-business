@@ -19,6 +19,8 @@ spring:
       enabled: false
     discovery:
       enabled: true
+    loadbalancer:
+      enabled: true  # Default for Docker, will be overridden by local profile
   datasource:
     url: jdbc:postgresql://localhost:5433/product-service-db?currentSchema=public&stringtype=unspecified&TimeZone=Asia/Kolkata
     username: product-service-user
@@ -71,6 +73,11 @@ jwt:
   issuer: raitukashtam
   access-expiration: 3600000  # 1 hour in milliseconds
   refresh-expiration: 604800000  # 7 days in milliseconds
+
+# Default auth service URL (for Docker)
+auth:
+  service:
+    url: http://auth-service
 
 logging:
   pattern:

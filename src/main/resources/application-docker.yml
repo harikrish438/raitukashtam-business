@@ -12,6 +12,8 @@ spring:
       enabled: false
     discovery:
       enabled: true
+    loadbalancer:
+      enabled: true  # Enable load balancer for Docker
   datasource:
     url: jdbc:postgresql://product-postgres:5432/product-service-db?currentSchema=public&stringtype=unspecified&TimeZone=Asia/Kolkata
     username: product-service-user
@@ -77,3 +79,8 @@ jwt:
   issuer: raitukashtam
   access-expiration: 3600000  # 1 hour in milliseconds
   refresh-expiration: 604800000  # 7 days in milliseconds
+
+# Docker-specific auth service URL (uses service discovery)
+auth:
+  service:
+    url: http://auth-service
