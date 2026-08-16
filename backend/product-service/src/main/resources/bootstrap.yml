@@ -1,0 +1,4 @@
+spring:
+  cloud:
+    config: enabled
+    uri: http://localhost:9002

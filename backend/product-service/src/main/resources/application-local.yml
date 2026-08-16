@@ -1,0 +1,12 @@
+# Local development profile configuration
+# Run with: --spring.profiles.active=local
+
+spring:
+  cloud:
+    loadbalancer:
+      enabled: false  # Disable load balancer for local development
+
+# Override auth service URL for local development
+auth:
+  service:
+    url: http://localhost:8080
