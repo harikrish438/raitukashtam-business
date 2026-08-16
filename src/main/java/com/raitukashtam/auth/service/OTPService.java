@@ -24,6 +24,9 @@ public class OTPService {
     @Value("${twofactor.api.key}")
     private String apiKey;
 
+    @Value("${twofactor.api.url:https://2factor.in/API/V1/%%s/SMS/%%s/AUTOGEN}")
+    private String apiUrlTemplate;
+
     private final RestTemplate restTemplate = new RestTemplate();
 
     private static final String OTP_PREFIX = "otp:";
@@ -51,7 +54,7 @@ public class OTPService {
     }
 
     public String sendOtp(String phoneNumber) {
-        String url = String.format("https://2factor.in/API/V1/%s/SMS/%s/AUTOGEN", apiKey, phoneNumber);
+        String url = String.format(apiUrlTemplate, apiKey, phoneNumber);
 
         ResponseEntity<Map> response = restTemplate.getForEntity(url, Map.class);
         Map<String, Object> body = response.getBody();

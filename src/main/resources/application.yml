@@ -90,10 +90,26 @@ jwt:
     refresh-token: X-Refresh-Token
     token-type: Bearer
 
+otp:
+  expiry:
+    minutes: 10
+
+twofactor:
+  api:
+    url: "https://2factor.in/API/V1/%s/SMS/%s/AUTOGEN"
+
+security:
+  login:
+    max-attempts: 5
+    captcha-required-after-attempts: 3
+    lockout-duration: 30m
+    failure-window: 15m
+
+google:
+  recaptcha:
+    verify-url: https://www.google.com/recaptcha/api/siteverify
+
 app:
-  otp:
-    expiry:
-      minutes: 10
   base-url: ${APP_BASE_URL:http://localhost:8080/}
 
 management:

@@ -13,6 +13,7 @@ import java.time.Duration;
 @ConfigurationProperties(prefix = "security.login")
 public class LoginSecurityConfig {
     private int maxAttempts = 5;
+    private int captchaRequiredAfterAttempts = 3;
     private Duration lockoutDuration = Duration.ofMinutes(30);
     private Duration failureWindow = Duration.ofMinutes(15);
 }

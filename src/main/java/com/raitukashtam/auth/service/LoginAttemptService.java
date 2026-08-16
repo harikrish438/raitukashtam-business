@@ -31,8 +31,6 @@ public class LoginAttemptService {
     @Getter
     @Value("${google.recaptcha.site-key}")
     private String recaptchaSiteKey;
-    
-    private static final int CAPTCHA_REQUIRED_AFTER_ATTEMPTS = 3;
 
     @Transactional
     public void loginSucceeded(String email, HttpServletRequest request) {
@@ -75,7 +73,7 @@ public class LoginAttemptService {
 
         
         // If this is the 4th or later attempt, require reCAPTCHA
-        if (failedAttempts >= CAPTCHA_REQUIRED_AFTER_ATTEMPTS) {
+        if (failedAttempts >= securityConfig.getCaptchaRequiredAfterAttempts()) {
             if (recaptchaToken == null || recaptchaToken.isEmpty()) {
                 Map<String, Object> response = new HashMap<>();
                 response.put("requiresCaptcha", true);
@@ -111,7 +109,7 @@ public class LoginAttemptService {
     public boolean isCaptchaRequired(User user) {
         Instant windowStart = Instant.now().minus(securityConfig.getFailureWindow());
         int failedAttempts = loginAttemptRepository.countFailedAttemptsSince(user, windowStart);
-        return failedAttempts >= CAPTCHA_REQUIRED_AFTER_ATTEMPTS;
+        return failedAttempts >= securityConfig.getCaptchaRequiredAfterAttempts();
     }
     
     private String getClientIP(HttpServletRequest request) {

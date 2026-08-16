@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+
 import java.time.Instant;
 import java.util.Date;
 import java.util.Map;
@@ -27,26 +28,14 @@ public class TokenService {
     private final long accessTokenExpMs;
     private final long refreshTokenExpMs;
 
-    @Value("${jwt.secret:my-super-secret-key-please-change-this-in-production}")
-    private String secret;
-    
-    @Value("${jwt.issuer:raitukashtam-auth-service}")
-    private String jwtIssuer;
-    
-    @Value("${jwt.access-token-exp-ms:900000}")
-    private long accessTokenExpirationMs;
-    
-    @Value("${jwt.refresh-token-exp-ms:604800000}")
-    private long refreshTokenExpirationMs;
-
-    public TokenService(@Value("${jwt.secret:my-super-secret-key-please-change-this-in-production}") String secret,
-                       @Value("${jwt.issuer:raitukashtam-auth-service}") String issuer,
-                       @Value("${jwt.access-token-exp-ms:900000}") long accessTokenExpMs,
+    public TokenService(@Value("${jwt.secret:your-secret-key-change-this-in-production}") String secret,
+                       @Value("${jwt.issuer:raitukashtam}") String issuer,
+                       @Value("${jwt.access-token-exp-ms:3600000}") long accessTokenExpMs,
                        @Value("${jwt.refresh-token-exp-ms:604800000}") long refreshTokenExpMs) {
         this.hmac = Algorithm.HMAC256(secret);
-        this.issuer = issuer != null ? issuer : "raitukashtam-auth-service";
-        this.accessTokenExpMs = accessTokenExpMs > 0 ? accessTokenExpMs : 900000; // 15 min default
-        this.refreshTokenExpMs = refreshTokenExpMs > 0 ? refreshTokenExpMs : 604800000; // 7 days default
+        this.issuer = issuer;
+        this.accessTokenExpMs = accessTokenExpMs;
+        this.refreshTokenExpMs = refreshTokenExpMs;
     }
 
     public Map<String, String> createAccessAndRefreshTokens(String username, String role) {
