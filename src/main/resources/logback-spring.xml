@@ -1,71 +1,37 @@
 <configuration>
 
-    <springProperty
-        scope="context"
-        name="APP_NAME"
-        source="spring.application.name"/>
+    <springProperty scope="context" name="APP_NAME" source="spring.application.name" defaultValue="app"/>
 
-    <property name="LOG_PATH" value="./logs"/>
+    <!-- LOCAL: colored, human-readable console -->
+    <springProfile name="!docker">
+        <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder>
+                <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %highlight(%-5level) [%cyan(${APP_NAME})] [traceId=%X{traceId:-}, spanId=%X{spanId:-}] [%thread] %logger{36} - %msg%n</pattern>
+            </encoder>
+        </appender>
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
 
-    <!-- Console -->
-    <appender name="CONSOLE"
-              class="ch.qos.logback.core.ConsoleAppender">
-
-        <encoder>
-            <pattern>
-                %d{yyyy-MM-dd HH:mm:ss.SSS}
-                [%thread]
-                %-5level
-                %logger{36}
-                -
-                %msg%n
-            </pattern>
-        </encoder>
-
-    </appender>
-
-
-    <!-- Rolling File -->
-    <appender name="ROLLING_FILE"
-              class="ch.qos.logback.core.rolling.RollingFileAppender">
-
-        <file>${LOG_PATH}/${APP_NAME}.log</file>
-
-        <rollingPolicy
-            class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
-
-            <fileNamePattern>
-                ${LOG_PATH}/archive/${APP_NAME}.%d{yyyy-MM-dd}.%i.log.gz
-            </fileNamePattern>
-
-            <maxFileSize>50MB</maxFileSize>
-
-            <maxHistory>30</maxHistory>
-
-            <totalSizeCap>2GB</totalSizeCap>
-
-        </rollingPolicy>
-
-        <encoder>
-            <pattern>
-                %d{yyyy-MM-dd HH:mm:ss.SSS}
-                [%thread]
-                %-5level
-                %logger{36}
-                -
-                %msg%n
-            </pattern>
-        </encoder>
-
-    </appender>
-
-
-    <root level="INFO">
-
-        <appender-ref ref="CONSOLE"/>
-
-        <appender-ref ref="ROLLING_FILE"/>
-
-    </root>
+    <!-- DOCKER: structured JSON to stdout -->
+    <springProfile name="docker">
+        <appender name="JSON_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+                <fieldNames>
+                    <timestamp>timestamp</timestamp>
+                    <version>[ignore]</version>
+                    <levelValue>[ignore]</levelValue>
+                    <logger>logger</logger>
+                    <thread>thread</thread>
+                </fieldNames>
+                <customFields>{"service":"${APP_NAME}"}</customFields>
+                <timeZone>Asia/Kolkata</timeZone>
+            </encoder>
+        </appender>
+        <root level="INFO">
+            <appender-ref ref="JSON_CONSOLE"/>
+        </root>
+    </springProfile>
 
 </configuration>

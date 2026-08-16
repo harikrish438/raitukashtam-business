@@ -12,8 +12,6 @@ spring:
   tracing:
     propagation:
       type: w3c
-    zipkin:
-      endpoint: http://zipkin:9411/api/v2/spans
   cloud:
     compatibility-verifier:
       enabled: false
@@ -106,11 +104,11 @@ management:
     enabled: true
     sampling:
       probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: http://zipkin:9411/api/v2/spans
 
 logging:
-  pattern:
-    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSS+05:30} %5p [traceId=%X{traceId:-}, spanId=%X{spanId:-}] %thread --- [%t] %-40.40logger{39} : %m%n"
-    level: "%5p [traceId=%X{traceId:-} spanId=%X{spanId:-}]"
   level:
     org.springframework.security: DEBUG
     org.springframework.web: DEBUG
