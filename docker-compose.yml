@@ -1,0 +1,92 @@
+# DEV environment — product-service
+# run with: docker compose up -d
+# Requires: .env file (copy from .env.example), a GITHUB_TOKEN env var with
+#   read:packages scope (to pull jwt-library from GitHub Packages at build
+#   time), and the raitukashtam platform stack already running
+#   (docker compose up -d in the raitukashtam repo) since this stack joins
+#   its network.
+networks:
+  raitukashtam-network:
+    external: true
+    name: raitukashtam-network
+
+volumes:
+  product-pgdata:
+  product-logs:
+
+secrets:
+  github_token:
+    environment: GITHUB_TOKEN
+
+services:
+
+  product-postgres:
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "10"
+    image: postgres:15
+    container_name: product-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: product-service-db
+      POSTGRES_USER: product-service-user
+      POSTGRES_PASSWORD: ${PRODUCT_DB_PASSWORD:-product-service-password}
+      TZ: Asia/Kolkata
+      PGTZ: Asia/Kolkata
+      POSTGRES_INITDB_ARGS: '--data-checksums --encoding=UTF8 --lc-collate=en_US.UTF-8 --lc-ctype=en_US.UTF-8 --no-locale'
+    command: ["postgres", "-c", "timezone=Asia/Kolkata", "-c", "log_timezone=Asia/Kolkata"]
+    ports:
+      - "5434:5432"
+    volumes:
+      - product-pgdata:/var/lib/postgresql/data
+    networks:
+      - raitukashtam-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U product-service-user -d product-service-db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  product-service:
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    build:
+      context: ./backend/product-service
+      secrets:
+        - github_token
+    container_name: product-service
+    restart: unless-stopped
+    volumes:
+      - product-logs:/var/log
+    depends_on:
+      product-postgres:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      VAULT_HOST: vault
+      VAULT_TOKEN: ${VAULT_TOKEN:-raitukashtam-vault-token}
+      SPRING_CLOUD_VAULT_KV_DEFAULT_CONTEXT: product-service
+      SPRING_DATASOURCE_URL: jdbc:postgresql://product-postgres:5432/product-service-db?currentSchema=public&stringtype=unspecified&TimeZone=Asia/Kolkata
+      SPRING_DATASOURCE_USERNAME: product-service-user
+      AUTH_SERVICE_URL: http://auth-service:8080
+      EUREKA_URL: http://discovery-service:8761/eureka/
+      EUREKA_INSTANCE_HOSTNAME: product-service
+      ZIPKIN_URL: http://zipkin:9411/api/v2/spans
+      CONFIG_SERVER_URL: http://config-server-service:9002
+      JAVA_TOOL_OPTIONS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5007"
+    ports:
+      - "8081:8081"
+      - "5007:5007"
+    networks:
+      - raitukashtam-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "http://localhost:8081/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s

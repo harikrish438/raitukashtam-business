@@ -1,21 +1,26 @@
+# syntax=docker/dockerfile:1
 # Build stage
 FROM maven:3.9.6-eclipse-temurin-21-alpine AS build
 WORKDIR /app
 
-# Copy and build jwt-library first
-COPY jwt-library ./jwt-library
-RUN cd jwt-library && mvn clean install -DskipTests
+# jwt-library is no longer local — it's pulled from GitHub Packages
+# (published by the raitukashtam platform repo's CI). Auth is passed in
+# as a BuildKit secret so the token never lands in an image layer.
+COPY settings.xml /root/.m2/settings.xml
 
 # Copy only the files needed to download dependencies
-COPY product-service/pom.xml .
-# Download dependencies
-RUN mvn dependency:go-offline -B
+COPY pom.xml .
+RUN --mount=type=secret,id=github_token \
+    GITHUB_ACTOR=harikrish438 GITHUB_TOKEN=$(cat /run/secrets/github_token) \
+    mvn dependency:go-offline -B
 
 # Copy source code
-COPY product-service/src ./src
+COPY src ./src
 
 # Build the application
-RUN mvn package -DskipTests
+RUN --mount=type=secret,id=github_token \
+    GITHUB_ACTOR=harikrish438 GITHUB_TOKEN=$(cat /run/secrets/github_token) \
+    mvn package -DskipTests
 
 # Run stage
 FROM eclipse-temurin:21-jre-alpine

@@ -22,6 +22,15 @@
         <spring-cloud.version>2023.0.3</spring-cloud.version>
     </properties>
 
+    <!-- jwt-library is published here by the raitukashtam platform repo's CI -->
+    <repositories>
+        <repository>
+            <id>github</id>
+            <name>Raitukashtam GitHub Packages</name>
+            <url>https://maven.pkg.github.com/harikrish438/raitukashtam</url>
+        </repository>
+    </repositories>
+
     <!-- BOM import must be BEFORE dependencies -->
     <dependencyManagement>
         <dependencies>
