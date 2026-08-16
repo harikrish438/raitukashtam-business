@@ -8,9 +8,14 @@ Raitukashtam farmer-marketplace platform. It was split out of the
 (2026-08-16) so domain services can be built, deployed, and redeployed
 independently of platform infrastructure and of each other. `product-service`
 is the first domain service; future ones (e.g. an order-service) follow the
-same pattern: `backend/<service>/`, a `docker-compose.<service>*.yml` (or its
-own root compose file if this repo ever grows to hold more than one service),
-and a path-filtered CI workflow.
+same pattern: everything for a service — source, Dockerfile, and all of its
+`docker-compose*.yml`/`.env*.example` files — lives under `backend/<service>/`,
+fully segregated from other business services, plus a path-filtered CI
+workflow (CI workflow files themselves must stay at the repo-root
+`.github/workflows/`, since that's the only location GitHub Actions reads).
+Unrelated business services may all depend on the same platform services
+(Eureka, config-server, Vault, auth-service) but should not share compose
+files with each other.
 
 ## Relationship to raitukashtam (the platform repo)
 
@@ -57,7 +62,7 @@ had just been uploaded successfully). A real PAT is required everywhere:
   consumes it via a BuildKit secret mount (`--mount=type=secret`), so it
   never lands in an image layer.
 - **Local `mvn` runs outside Docker** (e.g. `mvn spring-boot:run` against
-  `backend/product-service/docker-compose.yml`'s local Postgres): add a
+  `backend/product-service/docker-compose.local-postgres.yml`'s Postgres): add a
   `<server>` entry for id `github` with the same PAT to your own
   `~/.m2/settings.xml` (do not commit a personal settings.xml to this repo —
   `backend/product-service/settings.xml` here is the Docker-build-only copy
@@ -68,22 +73,30 @@ had just been uploaded successfully). A real PAT is required everywhere:
 ```
 raitukashtam-business/
 ├── backend/
-│   └── product-service/         # Product catalog service (domain service)
-│       ├── Dockerfile           # Pulls jwt-library from GitHub Packages
-│       ├── settings.xml         # Maven settings for the Docker build (env-var creds)
-│       └── docker-compose.yml   # Local-only: Postgres on 5433 for `mvn spring-boot:run`
-├── docker-compose.yml           # DEV stack (default: docker compose up)
-├── docker-compose.test.yml      # TEST stack
-├── docker-compose.prod.yml      # PROD stack
-├── .env.example                 # Dev secrets template → copy to .env
-├── .env.test.example            # Test secrets template → copy to .env.test
-├── .env.prod.example            # Prod secrets template → copy to .env.prod
+│   └── product-service/                    # Product catalog service (domain service)
+│       ├── Dockerfile                      # Pulls jwt-library from GitHub Packages
+│       ├── settings.xml                    # Maven settings for the Docker build (env-var creds)
+│       ├── docker-compose.local-postgres.yml  # Local-only: Postgres on 5433 for `mvn spring-boot:run`
+│       ├── docker-compose.yml              # DEV stack (default: docker compose up)
+│       ├── docker-compose.test.yml         # TEST stack
+│       ├── docker-compose.prod.yml         # PROD stack
+│       ├── .env.example                    # Dev secrets template → copy to .env
+│       ├── .env.test.example               # Test secrets template → copy to .env.test
+│       └── .env.prod.example               # Prod secrets template → copy to .env.prod
 └── .github/workflows/ci.yml     # Build/test on changes to backend/product-service/**
+                                  # (must live at repo-root .github/workflows/ — GitHub
+                                  #  Actions requirement, not a per-service choice)
 ```
+
+Each future service (`backend/order-service/`, etc.) gets its own complete
+set of these files, fully segregated — no shared root-level compose file
+across business services, even though they may all join the same platform
+network and depend on the same platform services.
 
 ## product-service (port 8081, debug 5007 in dev)
 - PostgreSQL DB: `product-service-db` (host port 5434 via this repo's Docker
-  Compose; port 5433 if run locally via `backend/product-service/docker-compose.yml`)
+  Compose; port 5433 if run locally via
+  `backend/product-service/docker-compose.local-postgres.yml`)
 - Endpoints: `POST /api/v1/products/`, `GET /api/v1/products/{productId}`
 - Calls auth-service (platform repo) via load-balanced RestTemplate to fetch user details
 - Validates JWT using `jwt-library`, resolved from GitHub Packages (see above)
@@ -98,7 +111,8 @@ docker compose up -d                       # DEV platform stack
 # or: docker compose -f docker-compose.test.yml --env-file .env.test up -d   # TEST
 # or: docker compose -f docker-compose.prod.yml --env-file .env.prod up -d   # PROD
 
-# Then in this repo:
+# Then, from this service's own directory:
+cd backend/product-service
 docker compose up -d                       # DEV
 # or: docker compose -f docker-compose.test.yml --env-file .env.test up -d   # TEST
 # or: docker compose -f docker-compose.prod.yml --env-file .env.prod up -d   # PROD
@@ -106,6 +120,8 @@ docker compose up -d                       # DEV
 
 Tearing down or redeploying this stack does not touch the platform stack,
 and vice versa — they're separate Compose projects sharing one network.
+Other business services in this repo (once they exist) are separate Compose
+projects too — bringing `product-service` up or down never touches them.
 
 ## History
 

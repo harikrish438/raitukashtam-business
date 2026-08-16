@@ -1,8 +1,9 @@
-# TEST environment — product-service
-# run with: docker compose -f docker-compose.test.yml --env-file .env.test up -d
-# Requires: .env.test file, a GITHUB_TOKEN env var with read:packages scope,
-#   and the raitukashtam platform test stack already running
-#   (docker compose -f docker-compose.test.yml --env-file .env.test up -d
+# PROD environment — product-service
+# run with (from this directory, backend/product-service/):
+#   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
+# Requires: .env.prod file, a GITHUB_TOKEN env var with read:packages scope,
+#   and the raitukashtam platform prod stack already running
+#   (docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
 #   in the raitukashtam repo) since this stack joins its network.
 networks:
   raitukashtam-network:
@@ -10,7 +11,7 @@ networks:
     name: raitukashtam-network
 
 volumes:
-  product-pgdata-test:
+  product-pgdata-prod:
 
 secrets:
   github_token:
@@ -20,17 +21,17 @@ services:
 
   product-postgres:
     image: postgres:15
-    container_name: product-postgres-test
-    restart: unless-stopped
+    container_name: product-postgres-prod
+    restart: always
     environment:
       POSTGRES_DB: product-service-db
       POSTGRES_USER: product-service-user
-      POSTGRES_PASSWORD: ${PRODUCT_DB_PASSWORD:?PRODUCT_DB_PASSWORD is required in .env.test}
+      POSTGRES_PASSWORD: ${PRODUCT_DB_PASSWORD:?PRODUCT_DB_PASSWORD is required in .env.prod}
       TZ: Asia/Kolkata
       PGTZ: Asia/Kolkata
-    command: ["postgres", "-c", "timezone=Asia/Kolkata", "-c", "log_timezone=Asia/Kolkata"]
+    command: ["postgres", "-c", "timezone=Asia/Kolkata", "-c", "log_timezone=Asia/Kolkata", "-c", "max_connections=200"]
     volumes:
-      - product-pgdata-test:/var/lib/postgresql/data
+      - product-pgdata-prod:/var/lib/postgresql/data
     networks:
       - raitukashtam-network
     healthcheck:
@@ -38,21 +39,26 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
 
   product-service:
     build:
-      context: ./backend/product-service
+      context: .
       secrets:
         - github_token
-    container_name: product-service-test
-    restart: unless-stopped
+    container_name: product-service-prod
+    restart: always
     depends_on:
       product-postgres:
         condition: service_healthy
     environment:
-      SPRING_PROFILES_ACTIVE: test
-      VAULT_HOST: vault
-      VAULT_TOKEN: ${VAULT_TOKEN}
+      SPRING_PROFILES_ACTIVE: prod
+      VAULT_HOST: ${VAULT_HOST:?VAULT_HOST is required in .env.prod}
+      VAULT_TOKEN: ${VAULT_TOKEN:?VAULT_TOKEN is required in .env.prod}
       SPRING_CLOUD_VAULT_KV_DEFAULT_CONTEXT: product-service
       SPRING_DATASOURCE_URL: jdbc:postgresql://product-postgres:5432/product-service-db?currentSchema=public&stringtype=unspecified&TimeZone=Asia/Kolkata
       SPRING_DATASOURCE_USERNAME: product-service-user
@@ -71,3 +77,8 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
