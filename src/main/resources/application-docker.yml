@@ -8,19 +8,30 @@ spring:
   application:
     name: auth-service
   config:
-    import: "optional:configserver:http://config-server-service:9002"
+    import:
+      - "vault://"
+      - "optional:configserver:http://config-server-service:9002"
   tracing:
     propagation:
       type: w3c
   cloud:
     compatibility-verifier:
       enabled: false
+    vault:
+      host: vault
+      port: 8200
+      scheme: http
+      authentication: TOKEN
+      token: ${VAULT_TOKEN:raitukashtam-vault-token}
+      kv:
+        enabled: true
+        backend: secret
+        default-context: auth-service
     discovery:
       enabled: true
   datasource:
     url: jdbc:postgresql://auth-postgres:5432/jwt_auth_db?currentSchema=public&stringtype=unspecified&TimeZone=Asia/Kolkata
     username: jwt_user
-    password: jwt_password
     driver-class-name: org.postgresql.Driver
     hikari:
       connection-timeout: 30000
@@ -37,7 +48,6 @@ spring:
   redis:
     host: redis
     port: 6379
-    password: your_redis_password
   session:
     store-type: redis
     redis:
