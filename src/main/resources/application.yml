@@ -1,19 +1,15 @@
 server:
   port: 8081
-  address: 0.0.0.0  # Listen on all network interfaces
+  address: 0.0.0.0
 
 spring:
+  application:
+    name: product-service
   tracing:
     propagation:
       type: w3c
-  config:
-    import:
-      - "optional:vault://"
-      - "optional:configserver:CONFIG-SERVER-SERVICE"
   main:
     time-zone: Asia/Kolkata
-  application:
-    name: product-service
   cloud:
     compatibility-verifier:
       enabled: false
@@ -30,11 +26,10 @@ spring:
     discovery:
       enabled: true
     loadbalancer:
-      enabled: true  # Default for Docker, will be overridden by local profile
+      enabled: true
   datasource:
-    url: jdbc:postgresql://localhost:5433/product-service-db?currentSchema=public&stringtype=unspecified&TimeZone=Asia/Kolkata
-    username: product-service-user
-    password: product-service-password
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5433/product-service-db?currentSchema=public&stringtype=unspecified&TimeZone=Asia/Kolkata}
+    username: ${SPRING_DATASOURCE_USERNAME:product-service-user}
     driver-class-name: org.postgresql.Driver
     hikari:
       connection-timeout: 30000
@@ -48,29 +43,36 @@ spring:
         prepareThreshold: 0
         preferQueryMode: simple
   jpa:
-    hibernate:
-      ddl-auto: update
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         jdbc:
           time_zone: Asia/Kolkata
-    show-sql: true
 
 eureka:
   client:
     register-with-eureka: true
     fetch-registry: true
     service-url:
-      default-zone: http://discovery-service:8761/eureka/
+      default-zone: ${EUREKA_URL:http://localhost:8761/eureka/}
     enabled: true
     registry-fetch-interval-seconds: 30
   instance:
-    hostname: product-service
+    hostname: ${EUREKA_INSTANCE_HOSTNAME:localhost}
     prefer-ip-address: true
     lease-renewal-interval-in-seconds: 30
     lease-expiration-duration-in-seconds: 90
     appname: product-service
+
+jwt:
+  secret: ${JWT_SECRET:your-secret-key-change-this-in-production}
+  issuer: raitukashtam
+  access-expiration: 3600000
+  refresh-expiration: 604800000
+
+auth:
+  service:
+    url: ${AUTH_SERVICE_URL:http://localhost:8080}
 
 management:
   tracing:
@@ -79,21 +81,13 @@ management:
       probability: 1.0
   zipkin:
     tracing:
-      endpoint: http://localhost:9411/api/v2/spans
-
-jwt:
-  secret: your-secret-key-change-this-in-production
-  issuer: raitukashtam
-  access-expiration: 3600000  # 1 hour in milliseconds
-  refresh-expiration: 604800000  # 7 days in milliseconds
-
-# Default auth service URL (for Docker)
-auth:
-  service:
-    url: http://auth-service
-
-logging:
-  level:
-    org.springframework.web: DEBUG
-    io.micrometer.tracing: DEBUG
-    org.springframework.boot.actuate.tracing: DEBUG
+      endpoint: ${ZIPKIN_URL:http://localhost:9411/api/v2/spans}
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+  server:
+    port: 8081
