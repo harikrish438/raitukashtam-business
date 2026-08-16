@@ -9,6 +9,11 @@ spring:
     name: auth-service
   config:
     import: "optional:configserver:http://config-server-service:9002"
+  tracing:
+    propagation:
+      type: w3c
+    zipkin:
+      endpoint: http://zipkin:9411/api/v2/spans
   cloud:
     compatibility-verifier:
       enabled: false
@@ -97,8 +102,17 @@ management:
   health:
     redis:
       enabled: false
+  tracing:
+    enabled: true
+    sampling:
+      probability: 1.0
 
 logging:
+  pattern:
+    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSS+05:30} %5p [traceId=%X{traceId:-}, spanId=%X{spanId:-}] %thread --- [%t] %-40.40logger{39} : %m%n"
+    level: "%5p [traceId=%X{traceId:-} spanId=%X{spanId:-}]"
   level:
     org.springframework.security: DEBUG
     org.springframework.web: DEBUG
+    io.micrometer.tracing: DEBUG
+    org.springframework.boot.actuate.tracing: DEBUG
