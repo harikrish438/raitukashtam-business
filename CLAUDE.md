@@ -42,10 +42,16 @@ existing version). Update the dependency version in
 ## Authenticating to GitHub Packages
 
 Both local Docker builds and CI need a token with `read:packages` scope to
-resolve `jwt-library`:
-- **CI** (`.github/workflows/ci.yml`): uses the repo's built-in
-  `secrets.GITHUB_TOKEN`, which already has `read:packages` for packages
-  published under the `harikrish438` account/org — no extra secret needed.
+resolve `jwt-library`. **`raitukashtam` (the platform repo) is private,
+so the published package is private too** — this repo's own auto-generated
+`secrets.GITHUB_TOKEN` is scoped only to this repo and CANNOT read it
+(confirmed by a failed CI run, 2026-08-16: "Could not find artifact
+com.raitukashtam:jwt-library:jar:1.0.0 in github", even though the artifact
+had just been uploaded successfully). A real PAT is required everywhere:
+- **CI** (`.github/workflows/ci.yml`): needs a classic PAT with
+  `read:packages`, added as a repo secret named `PACKAGES_READ_TOKEN`
+  (Settings > Secrets and variables > Actions > New repository secret).
+  Create the PAT at https://github.com/settings/tokens.
 - **Local `docker compose build`**: set `GITHUB_TOKEN` in your `.env` (see
   `.env.example`) to a classic PAT with `read:packages`. The Dockerfile
   consumes it via a BuildKit secret mount (`--mount=type=secret`), so it
