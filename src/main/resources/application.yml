@@ -7,10 +7,6 @@ server:
 spring:
   application:
     name: auth-service
-  config:
-    import:
-      - "optional:vault://"
-      - "optional:configserver:http://config-server-service:9002"
   tracing:
     propagation:
       type: w3c
@@ -29,26 +25,76 @@ spring:
         default-context: auth-service
     discovery:
       enabled: true
-    eureka:
-      client:
-        service-url:
-          default-zone: http://discovery-service:8761/eureka/
-        enabled: true
-        register-with-eureka: true
-        fetch-registry: true
-        registry-fetch-interval-seconds: 30
-      instance:
-        hostname: auth-service
-        prefer-ip-address: true
-        lease-renewal-interval-in-seconds: 30
-        lease-expiration-duration-in-seconds: 90
-        appname: auth-service
-        metadata:
-          management:
-            port: 8080
-          health-check-url-path: /actuator/health
-          status-page-url-path: /actuator/info
-          home-page-url-path: /
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5435/jwt_auth_db?currentSchema=public&stringtype=unspecified&TimeZone=Asia/Kolkata}
+    username: ${SPRING_DATASOURCE_USERNAME:jwt_user}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      connection-timeout: 30000
+      maximum-pool-size: 10
+      minimum-idle: 2
+      idle-timeout: 30000
+      max-lifetime: 120000
+      connection-init-sql: |
+        SET TIME ZONE 'Asia/Kolkata';
+        SET timezone = 'Asia/Kolkata';
+      data-source-properties:
+        prepareThreshold: 0
+        preferQueryMode: simple
+  redis:
+    host: ${SPRING_REDIS_HOST:localhost}
+    port: ${SPRING_REDIS_PORT:6379}
+  session:
+    store-type: redis
+    redis:
+      flush-mode: on_save
+  jpa:
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          time_zone: Asia/Kolkata
+
+eureka:
+  client:
+    register-with-eureka: true
+    fetch-registry: true
+    service-url:
+      default-zone: ${EUREKA_URL:http://localhost:8761/eureka/}
+    enabled: true
+    registry-fetch-interval-seconds: 30
+  instance:
+    hostname: ${EUREKA_INSTANCE_HOSTNAME:localhost}
+    prefer-ip-address: true
+    lease-renewal-interval-in-seconds: 30
+    lease-expiration-duration-in-seconds: 90
+    appname: auth-service
+    metadata:
+      management:
+        port: 8080
+      health-check-url-path: /actuator/health
+      status-page-url-path: /actuator/info
+      home-page-url-path: /
+
+jwt:
+  secret: ${JWT_SECRET:your-secret-key-change-this-in-production}
+  issuer: raitukashtam
+  access-token-exp-ms: 3600000
+  refresh-token-exp-ms: 604800000
+  access-expiration: 3600000
+  refresh-expiration: 604800000
+  clock-skew: 60
+  audience: raitukashtam-client
+  header-names:
+    access-token: Authorization
+    refresh-token: X-Refresh-Token
+    token-type: Bearer
+
+app:
+  otp:
+    expiry:
+      minutes: 10
+  base-url: ${APP_BASE_URL:http://localhost:8080/}
 
 management:
   tracing:
@@ -57,10 +103,16 @@ management:
       probability: 1.0
   zipkin:
     tracing:
-      endpoint: http://localhost:9411/api/v2/spans
-
-logging:
-  level:
-    org.springframework.web: DEBUG
-    io.micrometer.tracing: DEBUG
-    org.springframework.boot.actuate.tracing: DEBUG
+      endpoint: ${ZIPKIN_URL:http://localhost:9411/api/v2/spans}
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+  server:
+    port: 8080
+  health:
+    redis:
+      enabled: false
