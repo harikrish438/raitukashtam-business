@@ -6,18 +6,29 @@ spring:
   application:
     name: product-service
   config:
-    import: "optional:configserver:http://config-server-service:9002"
+    import:
+      - "vault://"
+      - "optional:configserver:http://config-server-service:9002"
   cloud:
     compatibility-verifier:
       enabled: false
+    vault:
+      host: vault
+      port: 8200
+      scheme: http
+      authentication: TOKEN
+      token: ${VAULT_TOKEN:raitukashtam-vault-token}
+      kv:
+        enabled: true
+        backend: secret
+        default-context: product-service
     discovery:
       enabled: true
     loadbalancer:
-      enabled: true  # Enable load balancer for Docker
+      enabled: true
   datasource:
     url: jdbc:postgresql://product-postgres:5432/product-service-db?currentSchema=public&stringtype=unspecified&TimeZone=Asia/Kolkata
     username: product-service-user
-    password: product-service-password
     driver-class-name: org.postgresql.Driver
     hikari:
       connection-timeout: 30000

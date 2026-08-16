@@ -7,7 +7,9 @@ spring:
     propagation:
       type: w3c
   config:
-    import: "optional:configserver:CONFIG-SERVER-SERVICE"
+    import:
+      - "optional:vault://"
+      - "optional:configserver:CONFIG-SERVER-SERVICE"
   main:
     time-zone: Asia/Kolkata
   application:
@@ -15,6 +17,16 @@ spring:
   cloud:
     compatibility-verifier:
       enabled: false
+    vault:
+      host: ${VAULT_HOST:localhost}
+      port: 8200
+      scheme: http
+      authentication: TOKEN
+      token: ${VAULT_TOKEN:raitukashtam-vault-token}
+      kv:
+        enabled: true
+        backend: secret
+        default-context: product-service
     discovery:
       enabled: true
     loadbalancer:
