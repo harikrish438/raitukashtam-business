@@ -6,20 +6,38 @@
 Raitukashtam farmer-marketplace platform. It was split out of the
 [raitukashtam](https://github.com/harikrish438/raitukashtam) platform repo
 (2026-08-16) so domain services can be built, deployed, and redeployed
-independently of platform infrastructure and of each other. `product-service`
-is the first domain service; future ones (e.g. an order-service) follow the
-same pattern: everything for a service — source, Dockerfile, and all of its
-`docker-compose*.yml`/`.env*.example` files — lives under `backend/<service>/`,
-fully segregated from other business services, plus a path-filtered CI
-workflow (CI workflow files themselves must stay at the repo-root
-`.github/workflows/`, since that's the only location GitHub Actions reads).
-Unrelated business services may all depend on the same platform services
-(Eureka, config-server, Vault, auth-service) but should not share compose
-files with each other.
+independently of platform infrastructure and of each other.
+
+This file holds only what's shared across every business service in this
+repo. Service-specific detail (ports, DB tables, endpoints, dependency
+versions, local dev instructions) lives in that service's own
+`backend/<service>/CLAUDE.md` — read it too whenever you're working inside
+a specific service directory.
+
+## Convention for Business Services
+
+Each service is fully self-contained under `backend/<service>/`:
+- Source code, `Dockerfile`, Maven `settings.xml` (Docker-build-only, reads
+  creds from env vars).
+- All of its `docker-compose*.yml` and `.env*.example` files — no shared
+  root-level compose file across services, even though services may depend
+  on the same platform infrastructure. This keeps services independently
+  buildable/deployable and avoids one service's stack colliding with
+  another's.
+- Its own `CLAUDE.md` with service-specific context.
+
+The one exception is CI: workflow files must live at repo-root
+`.github/workflows/` because that's the only location GitHub Actions reads
+from — not a per-service choice. Each service still gets its own
+path-filtered workflow there (e.g. `ci.yml` triggers only on
+`backend/product-service/**` changes).
+
+Current services:
+- `backend/product-service/` — see `backend/product-service/CLAUDE.md`
 
 ## Relationship to raitukashtam (the platform repo)
 
-This repo does **not** stand alone. At runtime, `product-service`:
+No business service in this repo stands alone at runtime. Each one:
 - Registers with Eureka (`discovery-service`) running in the platform repo's stack.
 - Pulls config from `config-server-service` in the platform stack.
 - Reads secrets from the same Vault instance the platform stack uses.
@@ -27,105 +45,45 @@ This repo does **not** stand alone. At runtime, `product-service`:
 - Joins the `raitukashtam-network` Docker bridge network created by the
   platform repo's compose files — this repo's compose files declare it
   `external: true` and never create it. **The platform stack must already be
-  running** before you bring this stack up.
+  running** before you bring any business-service stack up.
 
-At build time, `product-service` depends on the shared `jwt-library` for JWT
-validation. `jwt-library`'s source stays in the platform repo (it's also
-used by `auth-service` there) and is **published to GitHub Packages** by the
-platform repo's CI (`platform-ci.yml`, `publish-jwt-library` job) whenever
-`backend/jwt-library/**` changes on `main`. This repo's
-`backend/product-service/pom.xml` declares that GitHub Packages URL as a
-`<repository>` and resolves `jwt-library` from there — there is no local copy
-of jwt-library's source in this repo.
+At build time, services may depend on shared libraries (e.g. `jwt-library`
+for JWT validation) that live in the platform repo's source and are
+**published to GitHub Packages** by the platform repo's CI whenever the
+library's source changes on `main`. There is no local copy of any such
+library's source in this repo — each service's `pom.xml` declares the
+GitHub Packages URL as a `<repository>` and resolves it from there.
 
-**If jwt-library's public API changes** (in the platform repo), its
-`pom.xml` version must be bumped and republished before `product-service`
-here can pick up the change (GitHub Packages rejects republishing an
-existing version). Update the dependency version in
-`backend/product-service/pom.xml` to match.
+**If a shared library's public API changes** (in the platform repo), its
+`pom.xml` version must be bumped and republished before a service here can
+pick up the change (GitHub Packages rejects republishing an existing
+version) — then the dependency version in the service's `pom.xml` must be
+updated to match.
 
 ## Authenticating to GitHub Packages
 
-Both local Docker builds and CI need a token with `read:packages` scope to
-resolve `jwt-library`. **`raitukashtam` (the platform repo) is private,
-so the published package is private too** — this repo's own auto-generated
-`secrets.GITHUB_TOKEN` is scoped only to this repo and CANNOT read it
-(confirmed by a failed CI run, 2026-08-16: "Could not find artifact
-com.raitukashtam:jwt-library:jar:1.0.0 in github", even though the artifact
-had just been uploaded successfully). A real PAT is required everywhere:
-- **CI** (`.github/workflows/ci.yml`): needs a classic PAT with
-  `read:packages`, added as a repo secret named `PACKAGES_READ_TOKEN`
-  (Settings > Secrets and variables > Actions > New repository secret).
-  Create the PAT at https://github.com/settings/tokens.
-- **Local `docker compose build`**: set `GITHUB_TOKEN` in your `.env` (see
-  `.env.example`) to a classic PAT with `read:packages`. The Dockerfile
-  consumes it via a BuildKit secret mount (`--mount=type=secret`), so it
-  never lands in an image layer.
-- **Local `mvn` runs outside Docker** (e.g. `mvn spring-boot:run` against
-  `backend/product-service/docker-compose.local-postgres.yml`'s Postgres): add a
-  `<server>` entry for id `github` with the same PAT to your own
-  `~/.m2/settings.xml` (do not commit a personal settings.xml to this repo —
-  `backend/product-service/settings.xml` here is the Docker-build-only copy
-  that reads credentials from env vars).
-
-## Repository Layout
-
-```
-raitukashtam-business/
-├── backend/
-│   └── product-service/                    # Product catalog service (domain service)
-│       ├── Dockerfile                      # Pulls jwt-library from GitHub Packages
-│       ├── settings.xml                    # Maven settings for the Docker build (env-var creds)
-│       ├── docker-compose.local-postgres.yml  # Local-only: Postgres on 5433 for `mvn spring-boot:run`
-│       ├── docker-compose.yml              # DEV stack (default: docker compose up)
-│       ├── docker-compose.test.yml         # TEST stack
-│       ├── docker-compose.prod.yml         # PROD stack
-│       ├── .env.example                    # Dev secrets template → copy to .env
-│       ├── .env.test.example               # Test secrets template → copy to .env.test
-│       └── .env.prod.example               # Prod secrets template → copy to .env.prod
-└── .github/workflows/ci.yml     # Build/test on changes to backend/product-service/**
-                                  # (must live at repo-root .github/workflows/ — GitHub
-                                  #  Actions requirement, not a per-service choice)
-```
-
-Each future service (`backend/order-service/`, etc.) gets its own complete
-set of these files, fully segregated — no shared root-level compose file
-across business services, even though they may all join the same platform
-network and depend on the same platform services.
-
-## product-service (port 8081, debug 5007 in dev)
-- PostgreSQL DB: `product-service-db` (host port 5434 via this repo's Docker
-  Compose; port 5433 if run locally via
-  `backend/product-service/docker-compose.local-postgres.yml`)
-- Endpoints: `POST /api/v1/products/`, `GET /api/v1/products/{productId}`
-- Calls auth-service (platform repo) via load-balanced RestTemplate to fetch user details
-- Validates JWT using `jwt-library`, resolved from GitHub Packages (see above)
-
-Key DB table: `product` (id, name, description, price, user_id)
-
-## Running Docker Compose
-
-```sh
-# In the raitukashtam (platform) repo first:
-docker compose up -d                       # DEV platform stack
-# or: docker compose -f docker-compose.test.yml --env-file .env.test up -d   # TEST
-# or: docker compose -f docker-compose.prod.yml --env-file .env.prod up -d   # PROD
-
-# Then, from this service's own directory:
-cd backend/product-service
-docker compose up -d                       # DEV
-# or: docker compose -f docker-compose.test.yml --env-file .env.test up -d   # TEST
-# or: docker compose -f docker-compose.prod.yml --env-file .env.prod up -d   # PROD
-```
-
-Tearing down or redeploying this stack does not touch the platform stack,
-and vice versa — they're separate Compose projects sharing one network.
-Other business services in this repo (once they exist) are separate Compose
-projects too — bringing `product-service` up or down never touches them.
+Every business service that depends on a platform-repo library needs a
+token with `read:packages` scope to resolve it. **`raitukashtam` (the
+platform repo) is private, so packages published from it are private too**
+— a repo's own auto-generated `secrets.GITHUB_TOKEN` is scoped only to that
+repo and CANNOT read packages published under a different, private
+repository (confirmed by a failed CI run, 2026-08-16: "Could not find
+artifact com.raitukashtam:jwt-library:jar:1.0.0 in github", even though the
+artifact had just been uploaded successfully). A real PAT is required
+everywhere, for every service:
+- **CI** (`.github/workflows/<service>-ci.yml` or similar): needs a classic
+  PAT with `read:packages`, added as a repo secret named
+  `PACKAGES_READ_TOKEN` (Settings > Secrets and variables > Actions > New
+  repository secret). Create the PAT at https://github.com/settings/tokens.
+- **Local `docker compose build`**: set `GITHUB_TOKEN` in that service's own
+  `.env` (see its `.env.example`) to a classic PAT with `read:packages`.
+  Dockerfiles consume it via a BuildKit secret mount
+  (`--mount=type=secret`), so it never lands in an image layer.
+- **Local `mvn` runs outside Docker**: add a `<server>` entry for id
+  `github` with the same PAT to your own `~/.m2/settings.xml` (do not commit
+  a personal settings.xml to this repo).
 
 ## History
 
-`backend/product-service`'s git history (23 commits) was preserved from the
-platform repo via `git subtree split` + `git subtree add`, so `git log` and
-`git blame` on files under `backend/product-service/` predate this repo's
-own first commit.
+This repo was split out of the `raitukashtam` platform repo on 2026-08-16
+so business/domain services could be built and deployed independently.
