@@ -85,6 +85,13 @@ public class GlobalExceptionHandler {
         return createErrorResponse(ex.getMessage(), HttpStatus.TOO_MANY_REQUESTS);
     }
 
+    @ExceptionHandler(CaptchaRequiredException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Map<String, Object> handleCaptchaRequired(CaptchaRequiredException ex) {
+        log.error("Captcha verification failed : {}", ex.getMessage());
+        return createErrorResponse(ex.getMessage(), HttpStatus.BAD_REQUEST);
+    }
+
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public Map<String, Object> handleGlobalException(Exception ex) {

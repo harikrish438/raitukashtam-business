@@ -48,6 +48,20 @@ spring:
     store-type: redis
     redis:
       flush-mode: on_save
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${MAIL_USERNAME:raitukashtam@gmail.com}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+          ssl:
+            trust: smtp.gmail.com
+      "[mail.smtp.ehlo]": true
   jpa:
     properties:
       hibernate:
@@ -96,6 +110,7 @@ otp:
 
 twofactor:
   api:
+    key: ${TWOFACTOR_API_KEY:}
     url: "https://2factor.in/API/V1/%s/SMS/%s/AUTOGEN"
 
 security:
@@ -106,7 +121,10 @@ security:
     failure-window: 15m
 
 google:
+  client-id: ${GOOGLE_CLIENT_ID:}
   recaptcha:
+    site-key: ${RECAPTCHA_SITE_KEY:}
+    secret-key: ${RECAPTCHA_SECRET_KEY:}
     verify-url: https://www.google.com/recaptcha/api/siteverify
 
 app:
@@ -131,4 +149,6 @@ management:
     port: 8080
   health:
     redis:
+      enabled: false
+    mail:
       enabled: false
