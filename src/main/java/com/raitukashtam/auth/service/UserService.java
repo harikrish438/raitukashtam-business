@@ -17,6 +17,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -128,5 +129,17 @@ public class UserService {
         }
         
         return modelMapper.map(user, UserResponse.class);
+    }
+
+    @Transactional(readOnly = true)
+    public List<UserResponse> getAllUsers() {
+        return userRepository.findAll().stream()
+                .peek(user -> {
+                    if (user.getTenant() != null) {
+                        user.getTenant().getCode();
+                    }
+                })
+                .map(user -> modelMapper.map(user, UserResponse.class))
+                .toList();
     }
 }
