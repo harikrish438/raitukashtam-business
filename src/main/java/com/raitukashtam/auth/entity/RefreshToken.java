@@ -28,16 +28,12 @@ public class RefreshToken {
     @Column(nullable = false)
     private boolean revoked = false;
 
-    @Column(nullable = false, unique = true, length = 500)
-    private String token;
+    @Column(name = "token_hash", nullable = false, unique = true, length = 64)
+    private String tokenHash;
+
+    @Column(name = "family_id", nullable = false)
+    private UUID familyId;
 
     public RefreshToken() {}
-
-    public RefreshToken(String username, String role, Instant expiresAt) {
-        //this.id = UUID.randomUUID().toString();
-        this.username = username;
-        this.role = role;
-        this.expiryTime = expiresAt;
-    }
 }
 

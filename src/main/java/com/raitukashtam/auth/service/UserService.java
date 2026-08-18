@@ -1,6 +1,7 @@
 package com.raitukashtam.auth.service;
 
 import com.raitukashtam.auth.entity.User;
+import com.raitukashtam.auth.exception.AccountLockedException;
 import com.raitukashtam.auth.exception.AuthenticationException;
 import com.raitukashtam.auth.exception.ResourceAlreadyExistsException;
 import com.raitukashtam.auth.exception.ResourceNotFoundException;
@@ -91,6 +92,10 @@ public class UserService {
     public User authenticate(String email, String rawPassword) {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new AuthenticationException("Invalid email or password"));
+
+        if (user.isLocked()) {
+            throw new AccountLockedException("Account is locked. Please contact support.");
+        }
 
         if (!passwordEncoder.matches(rawPassword, user.getPassword())) {
             throw new AuthenticationException("Invalid email or password");

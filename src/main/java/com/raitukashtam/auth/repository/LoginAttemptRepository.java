@@ -26,8 +26,5 @@ public interface LoginAttemptRepository extends JpaRepository<LoginAttempt, UUID
            "AND la.successful = false")
     int countFailedAttemptsSince(@Param("user") User user, @Param("since") Instant since);
     
-    @Query("SELECT la FROM LoginAttempt la " +
-           "WHERE la.user = :user " +
-           "AND la.attemptTime = (SELECT MAX(la2.attemptTime) FROM LoginAttempt la2 WHERE la2.user = :user)")
-    Optional<LoginAttempt> findLastLoginAttempt(@Param("user") User user);
+    Optional<LoginAttempt> findFirstByUserOrderByAttemptTimeDesc(@Param("user") User user);
 }

@@ -61,17 +61,20 @@ public class LoginAttemptService {
         // Check for too many failed attempts
         Instant windowStart = Instant.now().minus(securityConfig.getFailureWindow());
         int failedAttempts = loginAttemptRepository.countFailedAttemptsSince(user, windowStart);
-        
-        /*// Check if account is locked
-        loginAttemptRepository.findLastLoginAttempt(user).ifPresent(lastAttempt -> {
-            if (!lastAttempt.isSuccessful() && isAccountLocked(user)) {
-                Instant unlockTime = lastAttempt.getAttemptTime().plus(securityConfig.getLockoutDuration());
-                throw new AccountLockedException("Account is locked. Please try again after " + unlockTime);
-            }
-        });*/
 
+        // Once failures within the window reach maxAttempts, hold a firmer lock for
+        // lockoutDuration from the last failure (independent of the rolling failureWindow).
+        if (failedAttempts >= securityConfig.getMaxAttempts()) {
+            loginAttemptRepository.findFirstByUserOrderByAttemptTimeDesc(user).ifPresent(lastAttempt -> {
+                if (!lastAttempt.isSuccessful()) {
+                    Instant unlockTime = lastAttempt.getAttemptTime().plus(securityConfig.getLockoutDuration());
+                    if (Instant.now().isBefore(unlockTime)) {
+                        throw new AccountLockedException("Account is locked. Please try again after " + unlockTime);
+                    }
+                }
+            });
+        }
 
-        
         // If this is the 4th or later attempt, require reCAPTCHA
         if (failedAttempts >= securityConfig.getCaptchaRequiredAfterAttempts()) {
             if (recaptchaToken == null || recaptchaToken.isEmpty()) {
@@ -95,17 +98,6 @@ public class LoginAttemptService {
         return null;
     }
 
-    private boolean isAccountLocked(User user) {
-        return loginAttemptRepository.findLastLoginAttempt(user)
-            .map(attempt -> {
-                if (attempt.isSuccessful()) return false;
-                
-                Instant lockEnd = attempt.getAttemptTime().plus(securityConfig.getLockoutDuration());
-                return Instant.now().isBefore(lockEnd);
-            })
-            .orElse(false);
-    }
-    
     public boolean isCaptchaRequired(User user) {
         Instant windowStart = Instant.now().minus(securityConfig.getFailureWindow());
         int failedAttempts = loginAttemptRepository.countFailedAttemptsSince(user, windowStart);

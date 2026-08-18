@@ -13,15 +13,17 @@ import com.raitukashtam.auth.repository.RefreshTokenRepository;
 import com.raitukashtam.auth.repository.TokenBlackListRepository;
 import com.raitukashtam.auth.request.LoginRequest;
 import com.raitukashtam.auth.service.LoginAttemptService;
+import com.raitukashtam.auth.service.TokenService;
 import com.raitukashtam.auth.service.UserService;
+import com.raitukashtam.auth.util.TokenHasher;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 @RestController
 public class AuthController {
@@ -38,6 +40,8 @@ public class AuthController {
     private UserService userService;
     @Autowired
     private LoginAttemptService loginAttemptService;
+    @Autowired
+    private TokenService tokenService;
 
     @PostMapping("/token")
     public Object login(
@@ -59,11 +63,14 @@ public class AuthController {
             
             String accessToken = jwtTokenUtil.generateAccessToken(username, user.getRole().name(), user.getTenant().getCode());
             String refreshToken = jwtTokenUtil.generateRefreshToken(username, user.getRole().name(), user.getTenant().getCode());
+            DecodedJWT refreshDecoded = jwtTokenUtil.validateRefreshToken(refreshToken);
 
             RefreshToken rt = new RefreshToken();
             rt.setUsername(username);
-            rt.setToken(refreshToken);
-            rt.setExpiryTime(Instant.now().plusMillis(7 * 24 * 60 * 60 * 1000));
+            rt.setRole(user.getRole().name());
+            rt.setTokenHash(TokenHasher.sha256Hex(refreshToken));
+            rt.setFamilyId(UUID.randomUUID());
+            rt.setExpiryTime(refreshDecoded.getExpiresAt().toInstant());
             refreshRepo.save(rt);
 
             return Map.of(
@@ -98,24 +105,13 @@ public class AuthController {
     @PostMapping("/refresh")
     public Map<String, String> refresh(@RequestHeader("Authorization") String refreshToken) {
         refreshToken = refreshToken.substring(7);
-        RefreshToken storedToken = refreshRepo.findByToken(refreshToken)
-                .filter(t -> !t.isRevoked() && t.getExpiryTime().isAfter(Instant.now()))
-                .orElseThrow(() -> new RuntimeException("Invalid refresh token"));
-
-        DecodedJWT jwt = jwtTokenUtil.validateToken(storedToken.getToken());
-        String username = jwt.getSubject();
-
-        User user = userService.findUserByEmail(username);
-
-        String newAccessToken = jwtTokenUtil.generateAccessToken(user.getEmail(), user.getRole().name(), user.getTenant().getCode());
-
-        return Map.of("access_token", newAccessToken);
+        return tokenService.rotateRefreshToken(refreshToken);
     }
 
     @PostMapping("/invalidateToken")
     public Map<String, String> logout(@RequestHeader("Authorization") String authHeader) {
         String token = authHeader.replace("Bearer ", "");
-        DecodedJWT jwt = jwtTokenUtil.validateToken(token);
+        DecodedJWT jwt = jwtTokenUtil.validateAccessToken(token);
 
         RevokedToken revoked = new RevokedToken();
         revoked.setJti(jwt.getId());

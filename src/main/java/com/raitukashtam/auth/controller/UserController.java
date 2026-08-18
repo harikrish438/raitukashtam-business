@@ -5,6 +5,7 @@ import com.raitukashtam.auth.model.UserRole;
 import com.raitukashtam.auth.request.RegisterRequest;
 import com.raitukashtam.auth.response.UserResponse;
 import com.raitukashtam.auth.service.UserService;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -20,7 +21,7 @@ public class UserController {
     private UserService userService;
 
     @PostMapping("/register")
-    public ResponseEntity<?> registerUser(@RequestBody RegisterRequest request) {
+    public ResponseEntity<?> registerUser(@Valid @RequestBody RegisterRequest request) {
         User user = userService.registerUser(
                 request.getEmail(),
                 request.getPassword(),

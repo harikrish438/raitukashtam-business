@@ -9,10 +9,15 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.UUID;
 
 public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long> {
-    Optional<RefreshToken> findByToken(String token);
+    Optional<RefreshToken> findByTokenHash(String tokenHash);
     void deleteByUsername(String username);
+
+    @Modifying
+    @Query("UPDATE RefreshToken r SET r.revoked = true WHERE r.familyId = :familyId")
+    void revokeAllByFamilyId(@Param("familyId") UUID familyId);
 
     @Modifying
     @Query("DELETE FROM RefreshToken r WHERE r.expiryTime < :now")

@@ -1,20 +1,21 @@
 package com.raitukashtam.auth.service;
 
-import com.auth0.jwt.JWT;
-import com.auth0.jwt.algorithms.Algorithm;
+import com.auth0.jwt.exceptions.JWTVerificationException;
+import com.auth0.jwt.interfaces.DecodedJWT;
 import com.raitukashtam.auth.entity.RefreshToken;
 import com.raitukashtam.auth.entity.RevokedToken;
+import com.raitukashtam.auth.entity.User;
+import com.raitukashtam.auth.exception.AuthenticationException;
+import com.raitukashtam.auth.jwt.JwtTokenUtil;
 import com.raitukashtam.auth.repository.RefreshTokenRepository;
 import com.raitukashtam.auth.repository.RevokedTokenRepository;
+import com.raitukashtam.auth.util.TokenHasher;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.util.Date;
 import java.util.Map;
-import java.util.Optional;
 
 @Service
 public class TokenService {
@@ -23,87 +24,54 @@ public class TokenService {
     private RefreshTokenRepository refreshTokenRepository;
     @Autowired
     private RevokedTokenRepository revokedTokenRepository;
-    private final Algorithm hmac;
-    private final String issuer;
-    private final long accessTokenExpMs;
-    private final long refreshTokenExpMs;
+    @Autowired
+    private JwtTokenUtil jwtTokenUtil;
+    @Autowired
+    private UserService userService;
 
-    public TokenService(@Value("${jwt.secret:your-secret-key-change-this-in-production}") String secret,
-                       @Value("${jwt.issuer:raitukashtam}") String issuer,
-                       @Value("${jwt.access-token-exp-ms:3600000}") long accessTokenExpMs,
-                       @Value("${jwt.refresh-token-exp-ms:604800000}") long refreshTokenExpMs) {
-        this.hmac = Algorithm.HMAC256(secret);
-        this.issuer = issuer;
-        this.accessTokenExpMs = accessTokenExpMs;
-        this.refreshTokenExpMs = refreshTokenExpMs;
-    }
-
-    public Map<String, String> createAccessAndRefreshTokens(String username, String role) {
-        Instant now = Instant.now();
-        Instant accessExp = now.plusMillis(accessTokenExpMs);
-
-        String jti = java.util.UUID.randomUUID().toString();
-
-        String accessToken = JWT.create()
-                .withIssuer(issuer)
-                .withSubject(username)
-                .withClaim("role", role)
-                .withIssuedAt(Date.from(now))
-                .withExpiresAt(Date.from(accessExp))
-                .withJWTId(jti)
-                .sign(hmac);
-
-        Instant refreshExp = now.plusMillis(refreshTokenExpMs);
-        RefreshToken refreshToken = new RefreshToken(username, role, refreshExp);
-        refreshTokenRepository.save(refreshToken);
-
-        return Map.of(
-                "access_token", accessToken,
-                "refresh_token", String.valueOf(refreshToken.getId()),
-                "token_type", "Bearer",
-                "expires_in", String.valueOf(accessTokenExpMs / 1000)
-        );
-    }
-
-    public Optional<Map<String, String>> refresh(String refreshTokenId) {
-        Optional<RefreshToken> dbTokenOpt = refreshTokenRepository.findByToken(refreshTokenId);
-        if (dbTokenOpt.isEmpty()) return Optional.empty();
-
-        RefreshToken dbToken = dbTokenOpt.get();
-        if (dbToken.getExpiryTime().isBefore(Instant.now())) {
-            // expired -> remove and deny
-            refreshTokenRepository.delete(dbToken);
-            return Optional.empty();
+    @Transactional(noRollbackFor = AuthenticationException.class)
+    public Map<String, String> rotateRefreshToken(String presentedRawToken) {
+        DecodedJWT presented;
+        try {
+            presented = jwtTokenUtil.validateRefreshToken(presentedRawToken);
+        } catch (JWTVerificationException e) {
+            throw new AuthenticationException("Invalid refresh token");
         }
 
-        // rotate refresh token: mark old revoked + issue new one
-        dbToken.setRevoked(true);
-        refreshTokenRepository.save(dbToken);
+        String presentedHash = TokenHasher.sha256Hex(presentedRawToken);
+        RefreshToken stored = refreshTokenRepository.findByTokenHash(presentedHash)
+                .orElseThrow(() -> new AuthenticationException("Invalid refresh token"));
 
-        // new refresh token
-        RefreshToken newRefresh = new RefreshToken(dbToken.getUsername(), dbToken.getRole(), Instant.now().plusMillis(refreshTokenExpMs));
-        refreshTokenRepository.save(newRefresh);
+        if (stored.isRevoked()) {
+            // Presented token was already rotated away once before -- reuse of a
+            // retired token is a theft signal. Kill the whole rotation chain.
+            refreshTokenRepository.revokeAllByFamilyId(stored.getFamilyId());
+            throw new AuthenticationException("Refresh token reuse detected; session revoked");
+        }
+        if (stored.getExpiryTime().isBefore(Instant.now())) {
+            throw new AuthenticationException("Refresh token expired");
+        }
 
-        // new access token
-        String newAccessTokenJti = java.util.UUID.randomUUID().toString();
-        Instant now = Instant.now();
-        Instant accessExp = now.plusMillis(accessTokenExpMs);
+        stored.setRevoked(true);
+        refreshTokenRepository.save(stored);
 
-        String accessToken = JWT.create()
-                .withIssuer(issuer)
-                .withSubject(dbToken.getUsername())
-                .withClaim("role", dbToken.getRole())
-                .withIssuedAt(Date.from(now))
-                .withExpiresAt(Date.from(accessExp))
-                .withJWTId(newAccessTokenJti)
-                .sign(hmac);
+        User user = userService.findUserByEmail(stored.getUsername());
+        String newRefreshRaw = jwtTokenUtil.generateRefreshToken(user.getEmail(), user.getRole().name(), user.getTenant().getCode());
+        String newAccessRaw = jwtTokenUtil.generateAccessToken(user.getEmail(), user.getRole().name(), user.getTenant().getCode());
+        DecodedJWT newRefreshDecoded = jwtTokenUtil.validateRefreshToken(newRefreshRaw);
 
-        return Optional.of(Map.of(
-                "access_token", accessToken,
-                "refresh_token", String.valueOf(newRefresh.getId()),
-                "token_type", "Bearer",
-                "expires_in", String.valueOf(accessTokenExpMs / 1000)
-        ));
+        RefreshToken newRow = new RefreshToken();
+        newRow.setUsername(user.getEmail());
+        newRow.setRole(user.getRole().name());
+        newRow.setTokenHash(TokenHasher.sha256Hex(newRefreshRaw));
+        newRow.setFamilyId(stored.getFamilyId());
+        newRow.setExpiryTime(newRefreshDecoded.getExpiresAt().toInstant());
+        refreshTokenRepository.save(newRow);
+
+        return Map.of(
+                "access_token", newAccessRaw,
+                "refresh_token", newRefreshRaw
+        );
     }
 
     public void revokeAccessToken(String jti, Instant expiresAt) {
@@ -111,15 +79,7 @@ public class TokenService {
         revokedTokenRepository.save(new RevokedToken(jti, expiresAt));
     }
 
-    public void revokeRefreshToken(Long refreshTokenId) {
-        refreshTokenRepository.findById(refreshTokenId).ifPresent(t -> {
-            t.setRevoked(true);
-            refreshTokenRepository.save(t);
-        });
-    }
-
     public boolean isAccessTokenRevoked(String jti) {
         return revokedTokenRepository.existsById(jti);
     }
 }
-

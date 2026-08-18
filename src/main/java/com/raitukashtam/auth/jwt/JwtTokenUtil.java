@@ -35,6 +35,14 @@ public class JwtTokenUtil {
         return getLibraryUtil().validateToken(token);
     }
 
+    public DecodedJWT validateAccessToken(String token) {
+        return getLibraryUtil().validateAccessToken(token);
+    }
+
+    public DecodedJWT validateRefreshToken(String token) {
+        return getLibraryUtil().validateRefreshToken(token);
+    }
+
     public String generatePasswordResetToken(String email) {
         return getLibraryUtil().generatePasswordResetToken(email);
     }

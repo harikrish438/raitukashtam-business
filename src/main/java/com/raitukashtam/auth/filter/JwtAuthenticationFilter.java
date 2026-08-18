@@ -56,7 +56,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     return;
                 }
 
-                DecodedJWT decodedJWT = jwtTokenUtil.validateToken(token);
+                DecodedJWT decodedJWT = jwtTokenUtil.validateAccessToken(token);
                 String username = decodedJWT.getSubject();
                 String role = decodedJWT.getClaim("role").asString();
                 String jti = decodedJWT.getId();
@@ -111,6 +111,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                         path.startsWith("/forgot-password") ||
                         path.startsWith("/reset-password") ||
                 path.startsWith("/token") ||
+                path.startsWith("/refresh") ||
                 path.equals("/tenants/create");
     }
 }
