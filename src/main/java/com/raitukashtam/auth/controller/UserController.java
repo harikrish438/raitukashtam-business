@@ -1,7 +1,6 @@
 package com.raitukashtam.auth.controller;
 
 import com.raitukashtam.auth.entity.User;
-import com.raitukashtam.auth.model.UserRole;
 import com.raitukashtam.auth.request.RegisterRequest;
 import com.raitukashtam.auth.response.UserResponse;
 import com.raitukashtam.auth.service.UserService;
@@ -25,7 +24,6 @@ public class UserController {
         User user = userService.registerUser(
                 request.getEmail(),
                 request.getPassword(),
-                request.getRole() != null ? request.getRole() : UserRole.CONSUMER,
                 request.getTenantCode(),
                 request.getFirstName(),
                 request.getLastName(),

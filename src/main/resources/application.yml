@@ -120,6 +120,10 @@ security:
     lockout-duration: 30m
     failure-window: 15m
 
+raitukashtam:
+  default-product-code: RAITUKASHTAM
+  default-product-name: Raitukashtam
+
 google:
   client-id: ${GOOGLE_CLIENT_ID:}
   recaptcha:

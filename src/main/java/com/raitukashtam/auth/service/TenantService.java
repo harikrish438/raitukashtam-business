@@ -1,14 +1,17 @@
 package com.raitukashtam.auth.service;
 
+import com.raitukashtam.auth.entity.Product;
 import com.raitukashtam.auth.entity.Tenant;
 import com.raitukashtam.auth.exception.ResourceAlreadyExistsException;
 import com.raitukashtam.auth.exception.ResourceNotFoundException;
+import com.raitukashtam.auth.repository.ProductRepository;
 import com.raitukashtam.auth.repository.TenantRepository;
 import com.raitukashtam.auth.request.TenantRequest;
 import com.raitukashtam.auth.response.TenantResponse;
 import lombok.RequiredArgsConstructor;
 import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,7 +23,12 @@ public class TenantService {
     @Autowired
     private TenantRepository tenantRepository;
     @Autowired
+    private ProductRepository productRepository;
+    @Autowired
     private ModelMapper modelMapper;
+
+    @Value("${raitukashtam.default-product-code}")
+    private String defaultProductCode;
 
     @Transactional
     public TenantResponse createTenant(TenantRequest request) {
@@ -29,12 +37,16 @@ public class TenantService {
             throw new ResourceAlreadyExistsException("Tenant with code " + request.getCode() + " already exists");
         }
 
+        Product defaultProduct = productRepository.findByCode(defaultProductCode)
+                .orElseThrow(() -> new ResourceNotFoundException("Default product not found with code: " + defaultProductCode));
+
         // Create and save new tenant
         Tenant tenant = new Tenant();
         tenant.setName(request.getName());
         tenant.setCode(request.getCode());
         tenant.setRegion(request.getRegion());
         tenant.setPincode(request.getPincode());
+        tenant.setProduct(defaultProduct);
 
         Tenant savedTenant = tenantRepository.save(tenant);
         return convertToDto(savedTenant);
@@ -53,6 +65,10 @@ public class TenantService {
     }
 
     private TenantResponse convertToDto(Tenant tenant) {
-        return modelMapper.map(tenant, TenantResponse.class);
+        TenantResponse response = modelMapper.map(tenant, TenantResponse.class);
+        if (tenant.getProduct() != null) {
+            response.setProductCode(tenant.getProduct().getCode());
+        }
+        return response;
     }
 }

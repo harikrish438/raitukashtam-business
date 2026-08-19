@@ -1,6 +1,5 @@
 package com.raitukashtam.auth.request;
 
-import com.raitukashtam.auth.model.UserRole;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -26,7 +25,6 @@ public class RegisterRequest {
     @NotBlank(message = "Lastname is required")
     @Size(min = 1, max = 50, message = "Last name must be between 1 and 50 characters")
     private String lastName;
-    private UserRole role;
     private String tenantCode;
     @NotBlank(message = "Mobile number is required")
     @Pattern(

@@ -1,11 +1,16 @@
 package com.raitukashtam.auth.service;
 
+import com.raitukashtam.auth.entity.MembershipStatus;
+import com.raitukashtam.auth.entity.Product;
+import com.raitukashtam.auth.entity.ProductMembership;
 import com.raitukashtam.auth.entity.User;
 import com.raitukashtam.auth.exception.AccountLockedException;
 import com.raitukashtam.auth.exception.AuthenticationException;
 import com.raitukashtam.auth.exception.ResourceAlreadyExistsException;
 import com.raitukashtam.auth.exception.ResourceNotFoundException;
 import com.raitukashtam.auth.model.UserRole;
+import com.raitukashtam.auth.repository.ProductMembershipRepository;
+import com.raitukashtam.auth.repository.ProductRepository;
 import com.raitukashtam.auth.repository.RefreshTokenRepository;
 import com.raitukashtam.auth.repository.TenantRepository;
 import com.raitukashtam.auth.repository.UserRepository;
@@ -13,11 +18,13 @@ import com.raitukashtam.auth.response.UserResponse;
 import org.hibernate.Hibernate;
 import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -30,6 +37,10 @@ public class UserService {
     private PasswordEncoder passwordEncoder;
     @Autowired
     private TenantRepository tenantRepository;
+    @Autowired
+    private ProductRepository productRepository;
+    @Autowired
+    private ProductMembershipRepository productMembershipRepository;
 
     @Autowired
     private RefreshTokenRepository refreshTokenRepository;
@@ -37,8 +48,11 @@ public class UserService {
     @Autowired
     ModelMapper modelMapper;
 
+    @Value("${raitukashtam.default-product-code}")
+    private String defaultProductCode;
+
     @Transactional
-    public User registerUser(String email, String password, UserRole role,
+    public User registerUser(String email, String password,
                              String tenantCode, String firstName,
                              String lastName, String mobileNumber) {
         // Verify tenant exists
@@ -53,10 +67,13 @@ public class UserService {
             throw new ResourceAlreadyExistsException("Mobile number already in use");
         }
 
+        Product defaultProduct = productRepository.findByCode(defaultProductCode)
+                .orElseThrow(() -> new ResourceNotFoundException("Default product not found with code: " + defaultProductCode));
+
         User user = new User();
         user.setEmail(email);
         user.setPassword(passwordEncoder.encode(password));
-        user.setRole(role);
+        user.setRole(UserRole.CONSUMER);
         user.setVerified(false);
         user.setFirstName(firstName);
         user.setLastName(lastName);
@@ -64,7 +81,16 @@ public class UserService {
         user.setTenant(tenantRepository.findByCode(tenantCode).orElse(null));
         user.setCreatedBy(email);
 
-        return userRepository.save(user);
+        User savedUser = userRepository.save(user);
+
+        ProductMembership membership = new ProductMembership();
+        membership.setUser(savedUser);
+        membership.setProduct(defaultProduct);
+        membership.setStatus(MembershipStatus.ACTIVE);
+        membership.setJoinedAt(LocalDateTime.now());
+        productMembershipRepository.save(membership);
+
+        return savedUser;
     }
 
     // Add this method to fetch user with tenant
