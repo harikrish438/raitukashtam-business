@@ -18,6 +18,7 @@ public class UserResponse {
     private TenantResponse tenant;
     private boolean verified = false; // Default to false
     private String mobileNumber;
+    private String identityId;
     private String createdAt;
     private String updatedAt;
     private String createdBy;

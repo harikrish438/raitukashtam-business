@@ -10,15 +10,15 @@ import java.time.LocalDateTime;
 @Entity
 @Data
 @Table(name = "product_membership",
-        uniqueConstraints = @UniqueConstraint(columnNames = {"user_id", "product_id"}))
+        uniqueConstraints = @UniqueConstraint(columnNames = {"identity_id", "product_id"}))
 public class ProductMembership extends BaseEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false)
-    private User user;
+    @JoinColumn(name = "identity_id")
+    private Identity identity;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "product_id", nullable = false)

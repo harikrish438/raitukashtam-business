@@ -25,8 +25,11 @@ public class User extends BaseEntity {
     @Column(nullable = false)
     private String lastName;
 
-    @Column(nullable = false)
-    private String password; // Will be hashed
+    // Deprecated: password now lives on the PASSWORD IdentityCredential.
+    // Kept mapped (unused going forward) so IdentityDataSeeder can read the
+    // existing BCrypt hash out of old rows during the one-time backfill.
+    @Column
+    private String password;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, columnDefinition = "varchar(255) default 'CONSUMER'")
@@ -39,9 +42,13 @@ public class User extends BaseEntity {
     @Column(nullable = false)
     private boolean verified = false; // Default to false
 
-    @Column(unique = true, nullable = false)
+    @Column(unique = true)
     private String mobileNumber;
 
     @Column(name = "is_locked", nullable = false, columnDefinition = "boolean default false")
     private boolean isLocked = false;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "identity_id")
+    private Identity identity;
 }

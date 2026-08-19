@@ -1,7 +1,6 @@
 package com.raitukashtam.auth.controller;
 
 import com.auth0.jwt.interfaces.DecodedJWT;
-import com.raitukashtam.auth.entity.RefreshToken;
 import com.raitukashtam.auth.entity.RevokedToken;
 import com.raitukashtam.auth.entity.User;
 import com.raitukashtam.auth.exception.AccountLockedException;
@@ -9,13 +8,11 @@ import com.raitukashtam.auth.exception.AuthenticationException;
 import com.raitukashtam.auth.exception.CaptchaRequiredException;
 import com.raitukashtam.auth.exception.TooManyFailedAttemptsException;
 import com.raitukashtam.auth.jwt.JwtTokenUtil;
-import com.raitukashtam.auth.repository.RefreshTokenRepository;
 import com.raitukashtam.auth.repository.TokenBlackListRepository;
 import com.raitukashtam.auth.request.LoginRequest;
 import com.raitukashtam.auth.service.LoginAttemptService;
 import com.raitukashtam.auth.service.TokenService;
 import com.raitukashtam.auth.service.UserService;
-import com.raitukashtam.auth.util.TokenHasher;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
@@ -30,8 +27,6 @@ public class AuthController {
 
     @Autowired
     private JwtTokenUtil jwtTokenUtil;
-    @Autowired
-    private RefreshTokenRepository refreshRepo;
 
     @Autowired
     private TokenBlackListRepository blacklistRepo;
@@ -66,23 +61,8 @@ public class AuthController {
             // Authenticate user
             User user = userService.authenticate(username, password);
             loginAttemptService.loginSucceeded(username, request);
-            
-            String accessToken = jwtTokenUtil.generateAccessToken(username, user.getRole().name(), user.getTenant().getCode());
-            String refreshToken = jwtTokenUtil.generateRefreshToken(username, user.getRole().name(), user.getTenant().getCode());
-            DecodedJWT refreshDecoded = jwtTokenUtil.validateRefreshToken(refreshToken);
 
-            RefreshToken rt = new RefreshToken();
-            rt.setUsername(username);
-            rt.setRole(user.getRole().name());
-            rt.setTokenHash(TokenHasher.sha256Hex(refreshToken));
-            rt.setFamilyId(UUID.randomUUID());
-            rt.setExpiryTime(refreshDecoded.getExpiresAt().toInstant());
-            refreshRepo.save(rt);
-
-            return Map.of(
-                "access_token", accessToken,
-                "refresh_token", refreshToken
-            );
+            return tokenService.issueTokenPair(user);
             
         } catch (AuthenticationException e) {
             loginAttemptService.loginFailed(username, "Invalid credentials", request);
@@ -103,7 +83,14 @@ public class AuthController {
             throw e;
             
         } catch (Exception e) {
-            loginAttemptService.loginFailed(username, "Unexpected error: " + e.getMessage(), request);
+            String reason = "Unexpected error: " + e.getMessage();
+            // failure_reason is varchar(255) -- an unbounded nested exception
+            // message would otherwise blow the column and mask the real error
+            // behind a confusing secondary one.
+            if (reason.length() > 255) {
+                reason = reason.substring(0, 255);
+            }
+            loginAttemptService.loginFailed(username, reason, request);
             throw e;
         }
     }
@@ -124,7 +111,7 @@ public class AuthController {
         revoked.setExpiresAt(jwt.getExpiresAt().toInstant());
         blacklistRepo.save(revoked);
 
-        userService.deleteByUsername(jwt.getSubject());
+        userService.deleteRefreshTokensByIdentityId(UUID.fromString(jwt.getSubject()));
 
         return Map.of("message", "Access token invalidated");
     }

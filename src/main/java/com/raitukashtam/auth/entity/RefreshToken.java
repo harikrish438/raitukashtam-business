@@ -16,8 +16,8 @@ public class RefreshToken {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false)
-    private String username;
+    @Column(name = "identity_id", nullable = false)
+    private UUID identityId;
 
     @Column(nullable = true)
     private String role;

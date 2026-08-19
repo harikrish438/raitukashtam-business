@@ -1,5 +1,9 @@
 package com.raitukashtam.auth.service;
 
+import com.raitukashtam.auth.entity.CredentialType;
+import com.raitukashtam.auth.entity.Identity;
+import com.raitukashtam.auth.entity.IdentityCredential;
+import com.raitukashtam.auth.entity.IdentityStatus;
 import com.raitukashtam.auth.entity.MembershipStatus;
 import com.raitukashtam.auth.entity.Product;
 import com.raitukashtam.auth.entity.ProductMembership;
@@ -9,6 +13,8 @@ import com.raitukashtam.auth.exception.AuthenticationException;
 import com.raitukashtam.auth.exception.ResourceAlreadyExistsException;
 import com.raitukashtam.auth.exception.ResourceNotFoundException;
 import com.raitukashtam.auth.model.UserRole;
+import com.raitukashtam.auth.repository.IdentityCredentialRepository;
+import com.raitukashtam.auth.repository.IdentityRepository;
 import com.raitukashtam.auth.repository.ProductMembershipRepository;
 import com.raitukashtam.auth.repository.ProductRepository;
 import com.raitukashtam.auth.repository.RefreshTokenRepository;
@@ -41,6 +47,10 @@ public class UserService {
     private ProductRepository productRepository;
     @Autowired
     private ProductMembershipRepository productMembershipRepository;
+    @Autowired
+    private IdentityRepository identityRepository;
+    @Autowired
+    private IdentityCredentialRepository identityCredentialRepository;
 
     @Autowired
     private RefreshTokenRepository refreshTokenRepository;
@@ -70,21 +80,40 @@ public class UserService {
         Product defaultProduct = productRepository.findByCode(defaultProductCode)
                 .orElseThrow(() -> new ResourceNotFoundException("Default product not found with code: " + defaultProductCode));
 
+        // An Identity may already exist (e.g. a prior Google-only sign-in under
+        // this email) -- reuse it and add a PASSWORD credential rather than
+        // creating a duplicate Identity for the same person.
+        Identity identity = identityRepository.findByPrimaryEmail(email)
+                .orElseGet(() -> {
+                    Identity newIdentity = new Identity();
+                    newIdentity.setPrimaryEmail(email);
+                    newIdentity.setPrimaryPhone(mobileNumber);
+                    newIdentity.setStatus(IdentityStatus.ACTIVE);
+                    return identityRepository.save(newIdentity);
+                });
+
+        IdentityCredential passwordCredential = new IdentityCredential();
+        passwordCredential.setIdentity(identity);
+        passwordCredential.setCredentialType(CredentialType.PASSWORD);
+        passwordCredential.setPasswordHash(passwordEncoder.encode(password));
+        passwordCredential.setVerified(false);
+        identityCredentialRepository.save(passwordCredential);
+
         User user = new User();
         user.setEmail(email);
-        user.setPassword(passwordEncoder.encode(password));
         user.setRole(UserRole.CONSUMER);
         user.setVerified(false);
         user.setFirstName(firstName);
         user.setLastName(lastName);
         user.setMobileNumber(mobileNumber);
         user.setTenant(tenantRepository.findByCode(tenantCode).orElse(null));
+        user.setIdentity(identity);
         user.setCreatedBy(email);
 
         User savedUser = userRepository.save(user);
 
         ProductMembership membership = new ProductMembership();
-        membership.setUser(savedUser);
+        membership.setIdentity(identity);
         membership.setProduct(defaultProduct);
         membership.setStatus(MembershipStatus.ACTIVE);
         membership.setJoinedAt(LocalDateTime.now());
@@ -123,7 +152,11 @@ public class UserService {
             throw new AccountLockedException("Account is locked. Please contact support.");
         }
 
-        if (!passwordEncoder.matches(rawPassword, user.getPassword())) {
+        IdentityCredential credential = identityCredentialRepository
+                .findByIdentity_IdAndCredentialType(user.getIdentity().getId(), CredentialType.PASSWORD)
+                .orElseThrow(() -> new AuthenticationException("Invalid email or password"));
+
+        if (!passwordEncoder.matches(rawPassword, credential.getPasswordHash())) {
             throw new AuthenticationException("Invalid email or password");
         }
 
@@ -135,31 +168,46 @@ public class UserService {
                 .orElseThrow(() -> new UsernameNotFoundException("Invalid username or password"));
     }
 
-    @Transactional
-    public void deleteByUsername(String username) {
-        refreshTokenRepository.deleteByUsername(username);
+    public User findByIdentityId(UUID identityId) {
+        return userRepository.findByIdentity_Id(identityId)
+                .orElseThrow(() -> new UsernameNotFoundException("Invalid or unknown identity"));
     }
-    
+
+    @Transactional
+    public void deleteRefreshTokensByIdentityId(UUID identityId) {
+        refreshTokenRepository.deleteByIdentityId(identityId);
+    }
+
     @Transactional
     public void updatePassword(Long userId, String newPassword) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Invalid username or password"));
-        
-        user.setPassword(passwordEncoder.encode(newPassword));
-        userRepository.save(user);
+
+        Identity identity = user.getIdentity();
+        IdentityCredential credential = identityCredentialRepository
+                .findByIdentity_IdAndCredentialType(identity.getId(), CredentialType.PASSWORD)
+                .orElseGet(() -> {
+                    IdentityCredential newCredential = new IdentityCredential();
+                    newCredential.setIdentity(identity);
+                    newCredential.setCredentialType(CredentialType.PASSWORD);
+                    return newCredential;
+                });
+        credential.setPasswordHash(passwordEncoder.encode(newPassword));
+        credential.setVerified(true);
+        identityCredentialRepository.save(credential);
     }
     
     @Transactional(readOnly = true)
     public UserResponse getUserById(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
-                
+
         // Initialize the tenant proxy to avoid LazyInitializationException
         if (user.getTenant() != null) {
             user.getTenant().getCode();
         }
-        
-        return modelMapper.map(user, UserResponse.class);
+
+        return toUserResponse(user);
     }
 
     @Transactional(readOnly = true)
@@ -170,7 +218,15 @@ public class UserService {
                         user.getTenant().getCode();
                     }
                 })
-                .map(user -> modelMapper.map(user, UserResponse.class))
+                .map(this::toUserResponse)
                 .toList();
+    }
+
+    private UserResponse toUserResponse(User user) {
+        UserResponse response = modelMapper.map(user, UserResponse.class);
+        if (user.getIdentity() != null) {
+            response.setIdentityId(user.getIdentity().getId().toString());
+        }
+        return response;
     }
 }

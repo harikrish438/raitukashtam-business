@@ -13,7 +13,7 @@ import java.util.UUID;
 
 public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long> {
     Optional<RefreshToken> findByTokenHash(String tokenHash);
-    void deleteByUsername(String username);
+    void deleteByIdentityId(UUID identityId);
 
     @Modifying
     @Query("UPDATE RefreshToken r SET r.revoked = true WHERE r.familyId = :familyId")

@@ -16,6 +16,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByEmail(String email);
     boolean existsByEmail(String email);
     boolean existsByMobileNumber(String mobileNumber);
+    Optional<User> findByIdentity_Id(UUID identityId);
 
     @EntityGraph(attributePaths = {"tenant"})
     Optional<User> findWithTenantById(Long id);

@@ -2,6 +2,7 @@ package com.raitukashtam.auth.service;
 
 import com.auth0.jwt.exceptions.JWTVerificationException;
 import com.auth0.jwt.interfaces.DecodedJWT;
+import com.raitukashtam.auth.entity.Identity;
 import com.raitukashtam.auth.entity.RefreshToken;
 import com.raitukashtam.auth.entity.RevokedToken;
 import com.raitukashtam.auth.entity.User;
@@ -16,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.Map;
+import java.util.UUID;
 
 @Service
 public class TokenService {
@@ -28,6 +30,38 @@ public class TokenService {
     private JwtTokenUtil jwtTokenUtil;
     @Autowired
     private UserService userService;
+
+    /**
+     * Mints a fresh access+refresh token pair for the user, starting a new
+     * rotation family. Used for login and Google sign-in.
+     */
+    @Transactional
+    public Map<String, String> issueTokenPair(User user) {
+        return issueTokenPair(user, UUID.randomUUID());
+    }
+
+    private Map<String, String> issueTokenPair(User user, UUID familyId) {
+        Identity identity = user.getIdentity();
+        String subject = identity.getId().toString();
+        String tenantCode = user.getTenant() != null ? user.getTenant().getCode() : null;
+
+        String accessToken = jwtTokenUtil.generateAccessToken(subject, user.getRole().name(), tenantCode);
+        String refreshToken = jwtTokenUtil.generateRefreshToken(subject, user.getRole().name(), tenantCode);
+        DecodedJWT refreshDecoded = jwtTokenUtil.validateRefreshToken(refreshToken);
+
+        RefreshToken rt = new RefreshToken();
+        rt.setIdentityId(identity.getId());
+        rt.setRole(user.getRole().name());
+        rt.setTokenHash(TokenHasher.sha256Hex(refreshToken));
+        rt.setFamilyId(familyId);
+        rt.setExpiryTime(refreshDecoded.getExpiresAt().toInstant());
+        refreshTokenRepository.save(rt);
+
+        return Map.of(
+                "access_token", accessToken,
+                "refresh_token", refreshToken
+        );
+    }
 
     @Transactional(noRollbackFor = AuthenticationException.class)
     public Map<String, String> rotateRefreshToken(String presentedRawToken) {
@@ -55,23 +89,8 @@ public class TokenService {
         stored.setRevoked(true);
         refreshTokenRepository.save(stored);
 
-        User user = userService.findUserByEmail(stored.getUsername());
-        String newRefreshRaw = jwtTokenUtil.generateRefreshToken(user.getEmail(), user.getRole().name(), user.getTenant().getCode());
-        String newAccessRaw = jwtTokenUtil.generateAccessToken(user.getEmail(), user.getRole().name(), user.getTenant().getCode());
-        DecodedJWT newRefreshDecoded = jwtTokenUtil.validateRefreshToken(newRefreshRaw);
-
-        RefreshToken newRow = new RefreshToken();
-        newRow.setUsername(user.getEmail());
-        newRow.setRole(user.getRole().name());
-        newRow.setTokenHash(TokenHasher.sha256Hex(newRefreshRaw));
-        newRow.setFamilyId(stored.getFamilyId());
-        newRow.setExpiryTime(newRefreshDecoded.getExpiresAt().toInstant());
-        refreshTokenRepository.save(newRow);
-
-        return Map.of(
-                "access_token", newAccessRaw,
-                "refresh_token", newRefreshRaw
-        );
+        User user = userService.findByIdentityId(stored.getIdentityId());
+        return issueTokenPair(user, stored.getFamilyId());
     }
 
     public void revokeAccessToken(String jti, Instant expiresAt) {
