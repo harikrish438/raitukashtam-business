@@ -23,10 +23,4 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     @Query("SELECT u FROM User u JOIN FETCH u.tenant t WHERE t.code = :tenantCode")
     List<User> findAllByTenantCode(@Param("tenantCode") String tenantCode);
-
-    @Query("SELECT u FROM User u WHERE u.email = :email AND u.password = :passwordHash")
-    Optional<User> findByEmailAndPasswordHash(
-            @Param("email") String email,
-            @Param("passwordHash") String passwordHash
-    );
 }
