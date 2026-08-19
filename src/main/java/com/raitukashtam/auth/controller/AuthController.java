@@ -51,6 +51,12 @@ public class AuthController {
         String recaptchaToken = loginRequest.getRecaptchaToken();
         
         try {
+            // Admin hard-lock takes precedence over the rolling captcha/lockout gate below,
+            // so a locked account is never masked behind "requiresCaptcha".
+            if (userService.findUserByEmail(username).isLocked()) {
+                throw new AccountLockedException("Account is locked. Please contact support.");
+            }
+
             // Check if reCAPTCHA verification is needed
             Map<String, Object> captchaResponse = loginAttemptService.checkLoginAttempts(username, recaptchaToken);
             if (captchaResponse != null) {
