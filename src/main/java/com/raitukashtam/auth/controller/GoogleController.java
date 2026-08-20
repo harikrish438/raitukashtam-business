@@ -14,12 +14,12 @@ import com.raitukashtam.auth.entity.ProductMembership;
 import com.raitukashtam.auth.entity.User;
 import com.raitukashtam.auth.exception.AccountLockedException;
 import com.raitukashtam.auth.exception.ResourceNotFoundException;
-import com.raitukashtam.auth.model.UserRole;
 import com.raitukashtam.auth.repository.IdentityCredentialRepository;
 import com.raitukashtam.auth.repository.IdentityRepository;
 import com.raitukashtam.auth.repository.ProductMembershipRepository;
 import com.raitukashtam.auth.repository.ProductRepository;
 import com.raitukashtam.auth.repository.UserRepository;
+import com.raitukashtam.auth.service.RoleService;
 import com.raitukashtam.auth.service.TokenService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -48,6 +48,7 @@ public class GoogleController {
     private final UserRepository userRepository;
     private final ProductRepository productRepository;
     private final ProductMembershipRepository productMembershipRepository;
+    private final RoleService roleService;
     private final TokenService tokenService;
 
     @PostMapping("/verify-token")
@@ -123,7 +124,6 @@ public class GoogleController {
         user.setEmail(email);
         user.setFirstName(parts[0]);
         user.setLastName(parts.length > 1 ? parts[1] : "");
-        user.setRole(UserRole.CONSUMER);
         user.setVerified(emailVerified);
         user.setIdentity(identity);
         user.setCreatedBy(email);
@@ -138,6 +138,7 @@ public class GoogleController {
         membership.setStatus(MembershipStatus.ACTIVE);
         membership.setJoinedAt(LocalDateTime.now());
         productMembershipRepository.save(membership);
+        roleService.assignDefaultRole(membership);
 
         return savedUser;
     }

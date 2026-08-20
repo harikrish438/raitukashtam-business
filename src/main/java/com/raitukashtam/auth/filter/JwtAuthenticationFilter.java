@@ -18,8 +18,9 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.Collections;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Component
@@ -58,7 +59,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
                 DecodedJWT decodedJWT = jwtTokenUtil.validateAccessToken(token);
                 String username = decodedJWT.getSubject();
-                String role = decodedJWT.getClaim("role").asString();
+                List<String> roles = decodedJWT.getClaim("roles").asList(String.class);
+                String platformRole = decodedJWT.getClaim("platform_role").asString();
                 String jti = decodedJWT.getId();
                 String tenantCode = decodedJWT.getClaim("tenant_code").asString();
 
@@ -68,10 +70,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     return;
                 }
 
+                List<SimpleGrantedAuthority> authorities = new ArrayList<>();
+                if (roles != null) {
+                    roles.forEach(r -> authorities.add(new SimpleGrantedAuthority("ROLE_" + r)));
+                }
+                if (platformRole != null) {
+                    authorities.add(new SimpleGrantedAuthority("ROLE_" + platformRole));
+                }
+
                 var auth = new UsernamePasswordAuthenticationToken(
                         username,
                         null,
-                        Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + role))
+                        authorities
                 );
                 // Add tenant code as a detail
                 auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));

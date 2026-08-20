@@ -25,4 +25,7 @@ public class Identity extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, columnDefinition = "varchar(255) default 'ACTIVE'")
     private IdentityStatus status = IdentityStatus.ACTIVE;
+
+    @Column(name = "is_platform_admin", nullable = false, columnDefinition = "boolean default false")
+    private boolean platformAdmin = false;
 }

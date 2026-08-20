@@ -1,6 +1,5 @@
 package com.raitukashtam.auth.entity;
 
-import com.raitukashtam.auth.model.UserRole;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -24,10 +23,6 @@ public class User extends BaseEntity {
 
     @Column(nullable = false)
     private String lastName;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, columnDefinition = "varchar(255) default 'CONSUMER'")
-    private UserRole role = UserRole.CONSUMER; // Default role
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "tenant_code", referencedColumnName = "code")

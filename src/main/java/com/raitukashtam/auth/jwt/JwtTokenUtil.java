@@ -4,6 +4,8 @@ import com.auth0.jwt.interfaces.DecodedJWT;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
+
 @Component
 public class JwtTokenUtil {
 
@@ -23,12 +25,12 @@ public class JwtTokenUtil {
         return new com.raitukashtam.jwt.JwtTokenUtil(secret, issuer, accessExpiration, refreshExpiration);
     }
 
-    public String generateAccessToken(String username, String role, String tenantCode) {
-        return getLibraryUtil().generateAccessToken(username, role, tenantCode);
+    public String generateAccessToken(String subject, List<String> roles, String platformRole, String tenantCode) {
+        return getLibraryUtil().generateAccessToken(subject, roles, platformRole, tenantCode);
     }
 
-    public String generateRefreshToken(String username, String role, String tenantCode) {
-        return getLibraryUtil().generateRefreshToken(username, role, tenantCode);
+    public String generateRefreshToken(String subject, List<String> roles, String platformRole, String tenantCode) {
+        return getLibraryUtil().generateRefreshToken(subject, roles, platformRole, tenantCode);
     }
 
     public DecodedJWT validateToken(String token) {

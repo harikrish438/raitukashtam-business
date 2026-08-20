@@ -12,7 +12,6 @@ import com.raitukashtam.auth.exception.AccountLockedException;
 import com.raitukashtam.auth.exception.AuthenticationException;
 import com.raitukashtam.auth.exception.ResourceAlreadyExistsException;
 import com.raitukashtam.auth.exception.ResourceNotFoundException;
-import com.raitukashtam.auth.model.UserRole;
 import com.raitukashtam.auth.repository.IdentityCredentialRepository;
 import com.raitukashtam.auth.repository.IdentityRepository;
 import com.raitukashtam.auth.repository.ProductMembershipRepository;
@@ -51,6 +50,8 @@ public class UserService {
     private IdentityRepository identityRepository;
     @Autowired
     private IdentityCredentialRepository identityCredentialRepository;
+    @Autowired
+    private RoleService roleService;
 
     @Autowired
     private RefreshTokenRepository refreshTokenRepository;
@@ -101,7 +102,6 @@ public class UserService {
 
         User user = new User();
         user.setEmail(email);
-        user.setRole(UserRole.CONSUMER);
         user.setVerified(false);
         user.setFirstName(firstName);
         user.setLastName(lastName);
@@ -118,6 +118,7 @@ public class UserService {
         membership.setStatus(MembershipStatus.ACTIVE);
         membership.setJoinedAt(LocalDateTime.now());
         productMembershipRepository.save(membership);
+        roleService.assignDefaultRole(membership);
 
         return savedUser;
     }
@@ -224,8 +225,12 @@ public class UserService {
 
     private UserResponse toUserResponse(User user) {
         UserResponse response = modelMapper.map(user, UserResponse.class);
-        if (user.getIdentity() != null) {
-            response.setIdentityId(user.getIdentity().getId().toString());
+        Identity identity = user.getIdentity();
+        if (identity != null) {
+            response.setIdentityId(identity.getId().toString());
+            response.setPlatformAdmin(identity.isPlatformAdmin());
+            productMembershipRepository.findByIdentity_IdAndProduct_Code(identity.getId(), defaultProductCode)
+                    .ifPresent(membership -> response.setRoles(roleService.getRoleCodes(membership)));
         }
         return response;
     }

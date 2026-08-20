@@ -17,7 +17,7 @@ public class ProductMembership extends BaseEntity {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "identity_id")
+    @JoinColumn(name = "identity_id", nullable = false)
     private Identity identity;
 
     @ManyToOne(fetch = FetchType.LAZY)

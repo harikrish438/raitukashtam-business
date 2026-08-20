@@ -19,9 +19,6 @@ public class RefreshToken {
     @Column(name = "identity_id", nullable = false)
     private UUID identityId;
 
-    @Column(nullable = true)
-    private String role;
-
     @Column(nullable = false)
     private Instant expiryTime;
 

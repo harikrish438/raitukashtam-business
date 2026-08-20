@@ -3,19 +3,24 @@ package com.raitukashtam.auth.service;
 import com.auth0.jwt.exceptions.JWTVerificationException;
 import com.auth0.jwt.interfaces.DecodedJWT;
 import com.raitukashtam.auth.entity.Identity;
+import com.raitukashtam.auth.entity.ProductMembership;
 import com.raitukashtam.auth.entity.RefreshToken;
 import com.raitukashtam.auth.entity.RevokedToken;
 import com.raitukashtam.auth.entity.User;
 import com.raitukashtam.auth.exception.AuthenticationException;
+import com.raitukashtam.auth.exception.ResourceNotFoundException;
 import com.raitukashtam.auth.jwt.JwtTokenUtil;
+import com.raitukashtam.auth.repository.ProductMembershipRepository;
 import com.raitukashtam.auth.repository.RefreshTokenRepository;
 import com.raitukashtam.auth.repository.RevokedTokenRepository;
 import com.raitukashtam.auth.util.TokenHasher;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -30,6 +35,13 @@ public class TokenService {
     private JwtTokenUtil jwtTokenUtil;
     @Autowired
     private UserService userService;
+    @Autowired
+    private ProductMembershipRepository productMembershipRepository;
+    @Autowired
+    private RoleService roleService;
+
+    @Value("${raitukashtam.default-product-code}")
+    private String defaultProductCode;
 
     /**
      * Mints a fresh access+refresh token pair for the user, starting a new
@@ -45,13 +57,19 @@ public class TokenService {
         String subject = identity.getId().toString();
         String tenantCode = user.getTenant() != null ? user.getTenant().getCode() : null;
 
-        String accessToken = jwtTokenUtil.generateAccessToken(subject, user.getRole().name(), tenantCode);
-        String refreshToken = jwtTokenUtil.generateRefreshToken(subject, user.getRole().name(), tenantCode);
+        ProductMembership membership = productMembershipRepository
+                .findByIdentity_IdAndProduct_Code(identity.getId(), defaultProductCode)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "No membership found for identity in product: " + defaultProductCode));
+        List<String> roles = roleService.getRoleCodes(membership);
+        String platformRole = identity.isPlatformAdmin() ? "PLATFORM_ADMIN" : null;
+
+        String accessToken = jwtTokenUtil.generateAccessToken(subject, roles, platformRole, tenantCode);
+        String refreshToken = jwtTokenUtil.generateRefreshToken(subject, roles, platformRole, tenantCode);
         DecodedJWT refreshDecoded = jwtTokenUtil.validateRefreshToken(refreshToken);
 
         RefreshToken rt = new RefreshToken();
         rt.setIdentityId(identity.getId());
-        rt.setRole(user.getRole().name());
         rt.setTokenHash(TokenHasher.sha256Hex(refreshToken));
         rt.setFamilyId(familyId);
         rt.setExpiryTime(refreshDecoded.getExpiresAt().toInstant());

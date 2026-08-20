@@ -22,9 +22,9 @@ public class SecurityConfig {
         http.csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/actuator/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/users").hasRole("ADMIN")
-                        .requestMatchers("/tenants/**").hasRole("ADMIN")
-                        .requestMatchers("/products/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/users").hasRole("PLATFORM_ADMIN")
+                        .requestMatchers("/tenants/**").hasRole("PLATFORM_ADMIN")
+                        .requestMatchers("/products/**").hasRole("PLATFORM_ADMIN")
                         .requestMatchers("/**").permitAll()
                         .anyRequest().authenticated()
                 ).sessionManagement(session -> session

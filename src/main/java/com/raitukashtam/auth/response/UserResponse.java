@@ -1,10 +1,11 @@
 package com.raitukashtam.auth.response;
 
 import com.raitukashtam.auth.entity.Tenant;
-import com.raitukashtam.auth.model.UserRole;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+
+import java.util.List;
 
 @Data
 @NoArgsConstructor
@@ -14,7 +15,8 @@ public class UserResponse {
     private String email;
     private String firstName;
     private String lastName;
-    private UserRole role = UserRole.CONSUMER; // Default role
+    private List<String> roles = List.of();
+    private boolean platformAdmin = false;
     private TenantResponse tenant;
     private boolean verified = false; // Default to false
     private String mobileNumber;
