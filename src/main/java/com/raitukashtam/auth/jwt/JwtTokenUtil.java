@@ -1,11 +1,14 @@
 package com.raitukashtam.auth.jwt;
 
-import com.auth0.jwt.interfaces.DecodedJWT;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import java.util.List;
-
+/**
+ * Password-reset tokens only -- access/refresh token issuance moved to
+ * Spring Authorization Server in Phase 4a/4b. This is a separate,
+ * untouched mechanism (not part of the retired access/refresh stack),
+ * still backed by jwt-library's HMAC signing.
+ */
 @Component
 public class JwtTokenUtil {
 
@@ -25,26 +28,6 @@ public class JwtTokenUtil {
         return new com.raitukashtam.jwt.JwtTokenUtil(secret, issuer, accessExpiration, refreshExpiration);
     }
 
-    public String generateAccessToken(String subject, List<String> roles, String platformRole, String tenantCode) {
-        return getLibraryUtil().generateAccessToken(subject, roles, platformRole, tenantCode);
-    }
-
-    public String generateRefreshToken(String subject, List<String> roles, String platformRole, String tenantCode) {
-        return getLibraryUtil().generateRefreshToken(subject, roles, platformRole, tenantCode);
-    }
-
-    public DecodedJWT validateToken(String token) {
-        return getLibraryUtil().validateToken(token);
-    }
-
-    public DecodedJWT validateAccessToken(String token) {
-        return getLibraryUtil().validateAccessToken(token);
-    }
-
-    public DecodedJWT validateRefreshToken(String token) {
-        return getLibraryUtil().validateRefreshToken(token);
-    }
-
     public String generatePasswordResetToken(String email) {
         return getLibraryUtil().generatePasswordResetToken(email);
     }
@@ -53,6 +36,3 @@ public class JwtTokenUtil {
         return getLibraryUtil().getUserIdFromResetToken(token);
     }
 }
-
-
-

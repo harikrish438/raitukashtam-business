@@ -20,7 +20,6 @@ import com.raitukashtam.auth.repository.ProductMembershipRepository;
 import com.raitukashtam.auth.repository.ProductRepository;
 import com.raitukashtam.auth.repository.UserRepository;
 import com.raitukashtam.auth.service.RoleService;
-import com.raitukashtam.auth.service.TokenService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
@@ -49,7 +48,6 @@ public class GoogleController {
     private final ProductRepository productRepository;
     private final ProductMembershipRepository productMembershipRepository;
     private final RoleService roleService;
-    private final TokenService tokenService;
 
     @PostMapping("/verify-token")
     @Transactional
@@ -106,7 +104,14 @@ public class GoogleController {
             throw new AccountLockedException("Account is locked. Please contact support.");
         }
 
-        return ResponseEntity.ok(tokenService.issueTokenPair(user));
+        // The identity/credential is verified and linked above, but Phase 4b
+        // retired direct token issuance in favor of Spring Authorization
+        // Server's Authorization Code + PKCE flow, which needs Google
+        // registered as an upstream IdP on the /login page -- separate,
+        // not-yet-done follow-up work (flagged explicitly, not silently
+        // left half-working).
+        return ResponseEntity.status(501)
+                .body("Google sign-in token issuance not yet available -- pending Authorization Code integration");
     }
 
     private Identity createIdentity(String email) {

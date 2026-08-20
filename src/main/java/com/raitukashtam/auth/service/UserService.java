@@ -16,7 +16,6 @@ import com.raitukashtam.auth.repository.IdentityCredentialRepository;
 import com.raitukashtam.auth.repository.IdentityRepository;
 import com.raitukashtam.auth.repository.ProductMembershipRepository;
 import com.raitukashtam.auth.repository.ProductRepository;
-import com.raitukashtam.auth.repository.RefreshTokenRepository;
 import com.raitukashtam.auth.repository.TenantRepository;
 import com.raitukashtam.auth.repository.UserRepository;
 import com.raitukashtam.auth.response.UserResponse;
@@ -52,9 +51,6 @@ public class UserService {
     private IdentityCredentialRepository identityCredentialRepository;
     @Autowired
     private RoleService roleService;
-
-    @Autowired
-    private RefreshTokenRepository refreshTokenRepository;
 
     @Autowired
     ModelMapper modelMapper;
@@ -172,11 +168,6 @@ public class UserService {
     public User findByIdentityId(UUID identityId) {
         return userRepository.findByIdentity_Id(identityId)
                 .orElseThrow(() -> new UsernameNotFoundException("Invalid or unknown identity"));
-    }
-
-    @Transactional
-    public void deleteRefreshTokensByIdentityId(UUID identityId) {
-        refreshTokenRepository.deleteByIdentityId(identityId);
     }
 
     @Transactional
