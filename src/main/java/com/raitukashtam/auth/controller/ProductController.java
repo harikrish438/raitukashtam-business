@@ -1,11 +1,11 @@
 package com.raitukashtam.auth.controller;
 
-import com.raitukashtam.auth.entity.Product;
-import com.raitukashtam.auth.exception.ResourceNotFoundException;
-import com.raitukashtam.auth.repository.ProductRepository;
+import com.raitukashtam.auth.request.ProductRequest;
 import com.raitukashtam.auth.response.ProductResponse;
+import com.raitukashtam.auth.service.ProductService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.modelmapper.ModelMapper;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -15,21 +15,20 @@ import java.util.List;
 @RequestMapping("/products")
 @RequiredArgsConstructor
 public class ProductController {
-    private final ProductRepository productRepository;
-    private final ModelMapper modelMapper;
+    private final ProductService productService;
+
+    @PostMapping
+    public ResponseEntity<ProductResponse> createProduct(@Valid @RequestBody ProductRequest request) {
+        return new ResponseEntity<>(productService.createProduct(request), HttpStatus.CREATED);
+    }
 
     @GetMapping
     public ResponseEntity<List<ProductResponse>> getAllProducts() {
-        List<ProductResponse> products = productRepository.findAll().stream()
-                .map(product -> modelMapper.map(product, ProductResponse.class))
-                .toList();
-        return ResponseEntity.ok(products);
+        return ResponseEntity.ok(productService.getAllProducts());
     }
 
     @GetMapping("/{code}")
     public ResponseEntity<ProductResponse> getProductByCode(@PathVariable String code) {
-        Product product = productRepository.findByCode(code)
-                .orElseThrow(() -> new ResourceNotFoundException("Product not found with code: " + code));
-        return ResponseEntity.ok(modelMapper.map(product, ProductResponse.class));
+        return ResponseEntity.ok(productService.getProductByCode(code));
     }
 }
