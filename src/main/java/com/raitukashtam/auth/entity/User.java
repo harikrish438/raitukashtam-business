@@ -24,10 +24,6 @@ public class User extends BaseEntity {
     @Column(nullable = false)
     private String lastName;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "tenant_code", referencedColumnName = "code")
-    private Tenant tenant;
-
     @Column(nullable = false)
     private boolean verified = false; // Default to false
 

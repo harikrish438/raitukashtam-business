@@ -16,10 +16,8 @@ import com.raitukashtam.auth.repository.IdentityCredentialRepository;
 import com.raitukashtam.auth.repository.IdentityRepository;
 import com.raitukashtam.auth.repository.ProductMembershipRepository;
 import com.raitukashtam.auth.repository.ProductRepository;
-import com.raitukashtam.auth.repository.TenantRepository;
 import com.raitukashtam.auth.repository.UserRepository;
 import com.raitukashtam.auth.response.UserResponse;
-import org.hibernate.Hibernate;
 import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -40,8 +38,6 @@ public class UserService {
     @Autowired
     private PasswordEncoder passwordEncoder;
     @Autowired
-    private TenantRepository tenantRepository;
-    @Autowired
     private ProductRepository productRepository;
     @Autowired
     private ProductMembershipRepository productMembershipRepository;
@@ -60,12 +56,7 @@ public class UserService {
 
     @Transactional
     public User registerUser(String email, String password,
-                             String tenantCode, String firstName,
-                             String lastName, String mobileNumber) {
-        // Verify tenant exists
-        tenantRepository.findByCode(tenantCode)
-                .orElseThrow(() -> new ResourceNotFoundException("Tenant not found with code: " + tenantCode));
-
+                             String firstName, String lastName, String mobileNumber) {
         if (userRepository.existsByEmail(email)) {
             throw new ResourceAlreadyExistsException("Email already in use");
         }
@@ -102,7 +93,6 @@ public class UserService {
         user.setFirstName(firstName);
         user.setLastName(lastName);
         user.setMobileNumber(mobileNumber);
-        user.setTenant(tenantRepository.findByCode(tenantCode).orElse(null));
         user.setIdentity(identity);
         user.setCreatedBy(email);
 
@@ -117,27 +107,6 @@ public class UserService {
         roleService.assignDefaultRole(membership);
 
         return savedUser;
-    }
-
-    // Add this method to fetch user with tenant
-    @Transactional(readOnly = true)
-    public User getUserWithTenant(Long userId) {
-        return userRepository.findById(userId)
-                .map(user -> {
-                    // Initialize the proxy to load tenant
-                    Hibernate.initialize(user.getTenant());
-                    return user;
-                })
-                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
-    }
-
-    // In your service
-    @Transactional(readOnly = true)
-    public UserResponse getUserWithTenantInfo(Long userId) {
-        User user = userRepository.findWithTenantById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
-
-        return modelMapper.map(user, UserResponse.class);
     }
 
     @Transactional(readOnly = true)
@@ -188,16 +157,11 @@ public class UserService {
         credential.setVerified(true);
         identityCredentialRepository.save(credential);
     }
-    
+
     @Transactional(readOnly = true)
     public UserResponse getUserById(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
-
-        // Initialize the tenant proxy to avoid LazyInitializationException
-        if (user.getTenant() != null) {
-            user.getTenant().getCode();
-        }
 
         return toUserResponse(user);
     }
@@ -205,11 +169,6 @@ public class UserService {
     @Transactional(readOnly = true)
     public List<UserResponse> getAllUsers() {
         return userRepository.findAll().stream()
-                .peek(user -> {
-                    if (user.getTenant() != null) {
-                        user.getTenant().getCode();
-                    }
-                })
                 .map(this::toUserResponse)
                 .toList();
     }

@@ -2,10 +2,8 @@ package com.raitukashtam.auth.config;
 
 import com.raitukashtam.auth.entity.BaseEntity;
 import com.raitukashtam.auth.entity.Product;
-import com.raitukashtam.auth.entity.Tenant;
 import com.raitukashtam.auth.entity.User;
 import com.raitukashtam.auth.response.ProductResponse;
-import com.raitukashtam.auth.response.TenantResponse;
 import com.raitukashtam.auth.response.UserResponse;
 import org.modelmapper.ModelMapper;
 import org.modelmapper.TypeMap;
@@ -31,16 +29,6 @@ public class AppConfiguration {
             mapper.map(BaseEntity::getUpdatedAt, UserResponse::setUpdatedAt);
             mapper.map(BaseEntity::getModifiedBy, UserResponse::setModifiedBy);
             mapper.map(BaseEntity::getCreatedBy, UserResponse::setCreatedBy);
-        });
-
-        // Configure Tenant to TenantResponse mapping
-        TypeMap<Tenant, TenantResponse> tenantMap = modelMapper.createTypeMap(Tenant.class, TenantResponse.class);
-        tenantMap.addMappings(mapper -> {
-            mapper.map(BaseEntity::getCreatedAt, TenantResponse::setCreatedAt);
-            mapper.map(BaseEntity::getUpdatedAt, TenantResponse::setUpdatedAt);
-            mapper.map(BaseEntity::getModifiedBy, TenantResponse::setModifiedBy);
-            mapper.map(BaseEntity::getCreatedBy, TenantResponse::setModifiedBy);
-            // Map other fields as needed
         });
 
         // Configure Product to ProductResponse mapping

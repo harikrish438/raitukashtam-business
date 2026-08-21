@@ -8,6 +8,24 @@ spring:
       ddl-auto: validate
     show-sql: true
 
+# Dev-only default keypair, checked in (same treatment as jwt.secret's dev
+# default) -- deliberately NOT in the shared application.yml, so test/prod
+# have no fallback path to it at all; Vault must supply these there or the
+# app fails to start. Regenerate with a jshell one-liner (NOT
+# `openssl genpkey` -- its PKCS8 encoding is not decodable by this JDK's
+# KeyFactory, "algid parse error, not a sequence"; confirmed live):
+#   jshell -q <<'EOF'
+#   import java.security.*; import java.util.Base64;
+#   var kp = KeyPairGenerator.getInstance("RSA"); kp.initialize(2048);
+#   var pair = kp.generateKeyPair();
+#   System.out.println(Base64.getEncoder().encodeToString(pair.getPrivate().getEncoded()));
+#   System.out.println(Base64.getEncoder().encodeToString(pair.getPublic().getEncoded()));
+#   EOF
+jwt:
+  signing-key:
+    private-key: ${JWT_SIGNING_KEY_PRIVATE:MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7L4oxzIHZds1RfKSuE0nNq8zFCHI86uY6D61jxhnHToSCrPnYZ/J2rkuTWnhk8fML9rTAjlNuRdB8jrCDkvisx30ZGD/1mzhjzszQBaucKeD2NxfzeoZPO9zk5s3lnFxZ8IQw8n5wn0FrZAuJdTOZVPxqELTRSvP9FB7sHlEgioVdbC31qikWtjcB+Gk5jzGOgu7J1te1XOENYD65jc7qpG0z7nJDzjmEp1d9tG+/gHo88Pvd2g2NEu4qKo/sjieJQH9MquitkWJ2dMbstMUrTCRgKD5OvhXlf/XHZ1v783cyBzsI7Wyy43uJ6Zu+SkrCsU8WHDPQrriIW8IoSq3RAgMBAAECggEABcPNLWMzYRGK+X5dmoRazqgivHM6BHUGDeX3dLYQS254P4eJAtCRu7S6vGEqCc7XScgpcTA48tGY3gstdcHoIXcb29LevmdPRWikL2hrTHoQNPkFpnCgtA4/i3etwetuvzDce17uhLSs6LwqLEu1IPzocLJOxU7aBJJy8NnurPI1sZdOxl01hJQGSepjx/iWIEKDJLEoHrOwt2xLnzfqJqi/RggNEhDO5bkQ+bvX0bvYmqiSG+7ErRTT28bjfsRulL0RMGzs5qf8oaJdAalB2nopckdTt7FmqrZX/i++DEYRIXYZi6k/muorCCnS4R+2GrxTl+qaUJEx/vIZD3C1GQKBgQDlJ8XMvyWEALFOc8BWudWPb+6jOBKkDvxhZZMzs33kgsbpoQTsfvfnemCh++NHa8oLdMi2gxYe8v1sqE/H75b6L67ALt81nJrjRXjhlmI5UacffFwhWUYLDFm+LHRy1HGG5UfUT+l5Wfy5oBB5Dyd/Eer/VxsQvWnUNt4+LQCdiQKBgQDRHR+CDqWCkP7yvdrCqITv324E7aLN/nS9OCc3glsEst6FdPhBDqeOC3xZzJvtg3X1NdDAs2wqGz+zsFcDU7a/ncGCTNIsmGOV9Wt+FzRfpncA7w0JgMgj8neiifiCYmxvu78RRDYAKyifh+sb35dT6u/nPDaFXdCfvww4PZcECQKBgQDEnqOxUjE2WgHIdrkJsNn1AO2ZTntwGQuj5iuvqMrUTwGtZGN9KFQ9YVuYoTAaD/qEaeft8fwBAi1AFgqeWo0IjfE7JPyQW5bqeqmFpisRU2Y6NdI3KwpWYHqAGlSwUmg2fnRrT0XcwcF+5EA+HyqcdRtVi7/FVUCAvbNjVem5QQKBgGQWlGYjrIR58g0tYe+ZyUcmofop46rFCAspPVwMQJRXKLqn6cr5wKj0RmiUzm04ZtUfFPOm7TaaJDtVQ9CL2QSN9XjwXAiMR94WwYRwhtjhTEReJtdNlH3gJ/LcJt4BTfWM3z7cbxxVi/QPkjCdLEk2Qe1jnJTo+ln7j1W75PRBAoGAJ9dyUW5Z3XvGX6rdTBdAZuwIgAorKBe5Nt/z1ISuQi3D2WQ6o+BIw3M3lv78q/bqTRoXTJTGj0s20seFee3UIPsOM+Annu7JsOTkvan1nrmPvm6pJDYWTKyXh9EAxDW0R9jiZWMlJw9mQ23ct9EvebEbD2C/7h+HvUCYh28dYRU=}
+    public-key: ${JWT_SIGNING_KEY_PUBLIC:MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuy+KMcyB2XbNUXykrhNJzavMxQhyPOrmOg+tY8YZx06Egqz52Gfydq5Lk1p4ZPHzC/a0wI5TbkXQfI6wg5L4rMd9GRg/9Zs4Y87M0AWrnCng9jcX83qGTzvc5ObN5ZxcWfCEMPJ+cJ9Ba2QLiXUzmVT8ahC00Urz/RQe7B5RIIqFXWwt9aopFrY3AfhpOY8xjoLuydbXtVzhDWA+uY3O6qRtM+5yQ845hKdXfbRvv4B6PPD73doNjRLuKiqP7I4niUB/TKrorZFidnTG7LTFK0wkYCg+Tr4V5X/1x2db+/N3Mgc7CO1ssuN7iembvkpKwrFPFhwz0K64iFvCKEqt0QIDAQAB}
+
 logging:
   level:
     org.springframework.security: DEBUG

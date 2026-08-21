@@ -24,7 +24,6 @@ public class UserController {
         User user = userService.registerUser(
                 request.getEmail(),
                 request.getPassword(),
-                request.getTenantCode(),
                 request.getFirstName(),
                 request.getLastName(),
                 request.getMobileNumber()

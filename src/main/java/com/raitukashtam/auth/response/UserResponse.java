@@ -1,6 +1,5 @@
 package com.raitukashtam.auth.response;
 
-import com.raitukashtam.auth.entity.Tenant;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -17,7 +16,6 @@ public class UserResponse {
     private String lastName;
     private List<String> roles = List.of();
     private boolean platformAdmin = false;
-    private TenantResponse tenant;
     private boolean verified = false; // Default to false
     private String mobileNumber;
     private String identityId;

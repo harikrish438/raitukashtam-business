@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.core.annotation.Order;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,10 +24,13 @@ import java.util.Base64;
  * Idempotent, same pattern as ProductDataSeeder. raitukashtam-web/-android/
  * -ios are dormant until Phase 4b (Authorization Code + PKCE); only the
  * BACKEND_SERVICE client is reachable in Phase 4a (client_credentials).
+ * Must run after ProductDataSeeder (@Order(1)) -- requires the default
+ * product to already exist.
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
+@Order(2)
 public class ClientDataSeeder implements CommandLineRunner {
 
     private static final int DEFAULT_ACCESS_TOKEN_TTL_SECONDS = 3600;
@@ -40,13 +44,16 @@ public class ClientDataSeeder implements CommandLineRunner {
     @Value("${raitukashtam.default-product-code}")
     private String defaultProductCode;
 
+    @Value("${raitukashtam.web-client.redirect-uri}")
+    private String webClientRedirectUri;
+
     @Override
     @Transactional
     public void run(String... args) {
         Product product = productRepository.findByCode(defaultProductCode)
                 .orElseThrow(() -> new IllegalStateException("Default product not found: " + defaultProductCode));
 
-        seedPublicClient("raitukashtam-web", ClientType.WEB_SPA, product, "http://localhost:3000/callback");
+        seedPublicClient("raitukashtam-web", ClientType.WEB_SPA, product, webClientRedirectUri);
         seedPublicClient("raitukashtam-android", ClientType.ANDROID, product, "raitukashtam://callback");
         seedPublicClient("raitukashtam-ios", ClientType.IOS, product, "raitukashtam://callback");
         seedBackendServiceClient("raitukashtam-backend-test", product);
@@ -69,7 +76,7 @@ public class ClientDataSeeder implements CommandLineRunner {
         uri.setUri(redirectUri);
         clientRedirectUriRepository.save(uri);
 
-        log.info("Seeded public client '{}'", clientId);
+        log.info("Seeded public client '{}' with redirect URI '{}'", clientId, redirectUri);
     }
 
     private void seedBackendServiceClient(String clientId, Product product) {

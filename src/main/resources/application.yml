@@ -128,6 +128,12 @@ security:
 raitukashtam:
   default-product-code: RAITUKASHTAM
   default-product-name: Raitukashtam
+  web-client:
+    redirect-uri: ${WEB_CLIENT_REDIRECT_URI:http://localhost:3000/callback}
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
+  platform-admin:
+    email: ${PLATFORM_ADMIN_EMAIL:}
 
 google:
   client-id: ${GOOGLE_CLIENT_ID:}

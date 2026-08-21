@@ -20,13 +20,13 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Adds the roles/platform_role/tenant_code claims Phase 3 defined, for
- * user (Authorization Code) logins only -- client_credentials tokens have
- * no Identity behind them and correctly get none of these, matching what
- * was verified live in Phase 4a. Roles are scoped to the requesting
- * client's own product (via Client.product), tightening what TokenService
- * used to do with a single hardcoded default product -- not possible
- * before Phase 4a introduced the Client entity.
+ * Adds the roles/platform_role claims Phase 3 defined, for user
+ * (Authorization Code) logins only -- client_credentials tokens have no
+ * Identity behind them and correctly get none of these, matching what was
+ * verified live in Phase 4a. Roles are scoped to the requesting client's
+ * own product (via Client.product), tightening what TokenService used to
+ * do with a single hardcoded default product -- not possible before Phase
+ * 4a introduced the Client entity.
  *
  * Re-fetches Identity/User fresh by the principal's identity UUID (rather
  * than reading a custom principal object) -- see
@@ -34,7 +34,7 @@ import java.util.UUID;
  * plain UsernamePasswordAuthenticationToken. Runs as a servlet filter
  * (OAuth2TokenEndpointFilter), before any Spring MVC open-session-in-view
  * scope, so this needs its own transaction to safely touch lazy
- * associations (identity.getIdentity()/user.getTenant()).
+ * associations (identity.getIdentity()).
  */
 @Component
 public class OAuth2TokenClaimsCustomizer implements OAuth2TokenCustomizer<JwtEncodingContext> {
@@ -85,9 +85,6 @@ public class OAuth2TokenClaimsCustomizer implements OAuth2TokenCustomizer<JwtEnc
         context.getClaims().claim("roles", roles);
         if (identity.isPlatformAdmin()) {
             context.getClaims().claim("platform_role", "PLATFORM_ADMIN");
-        }
-        if (user.getTenant() != null) {
-            context.getClaims().claim("tenant_code", user.getTenant().getCode());
         }
     }
 }

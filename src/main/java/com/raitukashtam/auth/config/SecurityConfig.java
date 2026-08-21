@@ -23,6 +23,7 @@ import org.springframework.security.web.authentication.SavedRequestAwareAuthenti
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
+import org.springframework.web.cors.CorsConfigurationSource;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -52,7 +53,8 @@ public class SecurityConfig {
 
     @Bean
     @Order(2)
-    public SecurityFilterChain filterChain(HttpSecurity http, JwtDecoder jwtDecoder) throws Exception {
+    public SecurityFilterChain filterChain(
+            HttpSecurity http, JwtDecoder jwtDecoder, CorsConfigurationSource corsConfigurationSource) throws Exception {
         // Built and added manually (not via .formLogin()), so it isn't
         // auto-wired to a session-based SecurityContextRepository the way
         // the DSL's own filters are -- must be set explicitly, and the same
@@ -80,11 +82,11 @@ public class SecurityConfig {
         });
 
         http.csrf(AbstractHttpConfigurer::disable)
+                .cors(cors -> cors.configurationSource(corsConfigurationSource))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/actuator/**").permitAll()
                         .requestMatchers("/login").permitAll()
                         .requestMatchers(HttpMethod.GET, "/users").hasRole("PLATFORM_ADMIN")
-                        .requestMatchers("/tenants/**").hasRole("PLATFORM_ADMIN")
                         .requestMatchers("/products/**").hasRole("PLATFORM_ADMIN")
                         .requestMatchers("/**").permitAll()
                         .anyRequest().authenticated()

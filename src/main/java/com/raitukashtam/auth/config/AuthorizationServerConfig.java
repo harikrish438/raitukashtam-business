@@ -26,12 +26,14 @@ import org.springframework.security.oauth2.server.authorization.settings.Authori
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
+import org.springframework.web.cors.CorsConfigurationSource;
 
-import java.security.KeyPair;
-import java.security.KeyPairGenerator;
+import java.security.KeyFactory;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
-import java.util.UUID;
+import java.security.spec.PKCS8EncodedKeySpec;
+import java.security.spec.X509EncodedKeySpec;
+import java.util.Base64;
 
 /**
  * Phase 4a: wires up Spring Authorization Server as a second, independent
@@ -47,14 +49,22 @@ public class AuthorizationServerConfig {
     @Value("${app.base-url}")
     private String baseUrl;
 
+    @Value("${jwt.signing-key.private-key}")
+    private String signingKeyPrivateBase64;
+
+    @Value("${jwt.signing-key.public-key}")
+    private String signingKeyPublicBase64;
+
     @Bean
     @Order(1)
-    public SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain authorizationServerSecurityFilterChain(
+            HttpSecurity http, CorsConfigurationSource corsConfigurationSource) throws Exception {
         OAuth2AuthorizationServerConfiguration.applyDefaultSecurity(http);
-        http.exceptionHandling(exceptions -> exceptions
-                .defaultAuthenticationEntryPointFor(
-                        new LoginUrlAuthenticationEntryPoint("/login"),
-                        new MediaTypeRequestMatcher(MediaType.TEXT_HTML)));
+        http.cors(cors -> cors.configurationSource(corsConfigurationSource))
+                .exceptionHandling(exceptions -> exceptions
+                        .defaultAuthenticationEntryPointFor(
+                                new LoginUrlAuthenticationEntryPoint("/login"),
+                                new MediaTypeRequestMatcher(MediaType.TEXT_HTML)));
         return http.build();
     }
 
@@ -67,21 +77,28 @@ public class AuthorizationServerConfig {
     }
 
     /**
-     * dev-only: generates a fresh RSA keypair on every startup, so tokens
-     * don't survive a restart. test/prod need a Vault-backed persistent
-     * keypair (mirroring how jwt.secret is already Vault-seeded) before
-     * this is usable there -- not wired up in Phase 4a, see the plan.
+     * Persistent keypair, sourced from jwt.signing-key.private-key/public-key
+     * (base64 PKCS8/X509 DER) -- Vault-seeded in test/prod, a checked-in
+     * dev-only default in application-dev.yml, same wiring pattern as
+     * jwt.secret. Must be stable across restarts/replicas: a fresh keypair
+     * every boot (the old behavior) invalidated every outstanding token on
+     * every restart and would make a second replica sign with a different
+     * key than the first validates against. keyIDFromThumbprint() derives
+     * a deterministic kid from the key material itself (RFC 7638), so the
+     * same key always produces the same kid -- a random kid here would
+     * defeat the fix even with the key material itself persisted, since
+     * JWKS lookup matches by kid first.
      */
     @Bean
     public JWKSource<SecurityContext> jwkSource() throws Exception {
-        KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA");
-        keyPairGenerator.initialize(2048);
-        KeyPair keyPair = keyPairGenerator.generateKeyPair();
-        RSAPublicKey publicKey = (RSAPublicKey) keyPair.getPublic();
-        RSAPrivateKey privateKey = (RSAPrivateKey) keyPair.getPrivate();
+        KeyFactory keyFactory = KeyFactory.getInstance("RSA");
+        RSAPrivateKey privateKey = (RSAPrivateKey) keyFactory.generatePrivate(
+                new PKCS8EncodedKeySpec(Base64.getDecoder().decode(signingKeyPrivateBase64)));
+        RSAPublicKey publicKey = (RSAPublicKey) keyFactory.generatePublic(
+                new X509EncodedKeySpec(Base64.getDecoder().decode(signingKeyPublicBase64)));
         RSAKey rsaKey = new RSAKey.Builder(publicKey)
                 .privateKey(privateKey)
-                .keyID(UUID.randomUUID().toString())
+                .keyIDFromThumbprint()
                 .build();
         return new ImmutableJWKSet<>(new JWKSet(rsaKey));
     }
