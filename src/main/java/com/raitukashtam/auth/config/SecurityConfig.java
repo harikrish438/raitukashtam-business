@@ -51,16 +51,29 @@ public class SecurityConfig {
         return new ProviderManager(identityAuthenticationProvider);
     }
 
+    /**
+     * A real bean (not a filterChain()-local variable) so GoogleController
+     * can authenticate a session the same way a successful /login does --
+     * write an Authentication here, and /oauth2/authorize (hit next by the
+     * frontend, same session cookie) proceeds straight to issuing a code
+     * instead of redirecting to /login, exactly as if the user had just
+     * completed a password login.
+     */
+    @Bean
+    public SecurityContextRepository securityContextRepository() {
+        return new HttpSessionSecurityContextRepository();
+    }
+
     @Bean
     @Order(2)
     public SecurityFilterChain filterChain(
-            HttpSecurity http, JwtDecoder jwtDecoder, CorsConfigurationSource corsConfigurationSource) throws Exception {
+            HttpSecurity http, JwtDecoder jwtDecoder, CorsConfigurationSource corsConfigurationSource,
+            SecurityContextRepository securityContextRepository) throws Exception {
         // Built and added manually (not via .formLogin()), so it isn't
         // auto-wired to a session-based SecurityContextRepository the way
         // the DSL's own filters are -- must be set explicitly, and the same
         // instance shared with .securityContext() below so the read side
         // (SecurityContextHolderFilter) agrees with what this filter saves.
-        SecurityContextRepository securityContextRepository = new HttpSessionSecurityContextRepository();
         CaptchaAwareAuthenticationFilter loginFilter =
                 new CaptchaAwareAuthenticationFilter(authenticationManager(), loginAttemptService);
         loginFilter.setSecurityContextRepository(securityContextRepository);
@@ -87,6 +100,7 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/**").permitAll()
                         .requestMatchers("/login").permitAll()
                         .requestMatchers(HttpMethod.GET, "/users").hasRole("PLATFORM_ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/users/*/platform-admin").hasRole("PLATFORM_ADMIN")
                         .requestMatchers("/products/**").hasRole("PLATFORM_ADMIN")
                         .requestMatchers("/**").permitAll()
                         .anyRequest().authenticated()

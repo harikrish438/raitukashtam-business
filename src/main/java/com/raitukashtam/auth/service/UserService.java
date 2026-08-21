@@ -158,6 +158,23 @@ public class UserService {
         identityCredentialRepository.save(credential);
     }
 
+    /**
+     * Promotes/demotes the identity behind userId to PLATFORM_ADMIN.
+     * Guarded at the endpoint level (hasRole("PLATFORM_ADMIN")) -- this
+     * method itself doesn't check who's calling.
+     */
+    @Transactional
+    public UserResponse setPlatformAdmin(Long userId, boolean platformAdmin) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
+
+        Identity identity = user.getIdentity();
+        identity.setPlatformAdmin(platformAdmin);
+        identityRepository.save(identity);
+
+        return toUserResponse(user);
+    }
+
     @Transactional(readOnly = true)
     public UserResponse getUserById(Long userId) {
         User user = userRepository.findById(userId)

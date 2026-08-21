@@ -1,31 +1,35 @@
 package com.raitukashtam.auth.controller;
 
-import com.raitukashtam.auth.response.OtpResponse;
 import com.raitukashtam.auth.service.OTPService;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.raitukashtam.auth.service.RateLimiterService;
+import jakarta.servlet.http.HttpServletRequest;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
+import java.time.Duration;
 
 @RestController
 @RequestMapping("/otp")
+@RequiredArgsConstructor
 public class OtpController {
-    @Autowired
-    private OTPService otpService;
+
+    private final OTPService otpService;
+    private final RateLimiterService rateLimiterService;
 
     @PostMapping("/generate")
-    public ResponseEntity<OtpResponse> generateOtp(@RequestParam String mobileNumber) {
-        String otp = otpService.generateAndSaveOTP(mobileNumber);
-        // TODO: Send OTP to user's email/phone
-        return ResponseEntity.ok(new OtpResponse(otp));
+    public ResponseEntity<Void> generateOtp(@RequestParam String mobileNumber, HttpServletRequest request) {
+        rateLimiterService.checkLimit("otp-generate", request, 5, Duration.ofHours(1));
+        otpService.generateAndSendOtp(mobileNumber);
+        return ResponseEntity.ok().build();
     }
 
     @PostMapping("/verify")
-    public ResponseEntity<?> verifyOtp(@RequestParam String email,
-                                       @RequestParam String otp) {
-        if (otpService.validateOTP(email, otp)) {
-            // Generate JWT token or session token here
+    public ResponseEntity<?> verifyOtp(@RequestParam String mobileNumber,
+                                        @RequestParam String otp,
+                                        HttpServletRequest request) {
+        rateLimiterService.checkLimit("otp-verify", request, 10, Duration.ofHours(1));
+        if (otpService.validateOtp(mobileNumber, otp)) {
             return ResponseEntity.ok().build();
         }
         return ResponseEntity.badRequest().body("Invalid or expired OTP");

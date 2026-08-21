@@ -35,4 +35,8 @@ public class JwtTokenUtil {
     public String getUserIdFromResetToken(String token) {
         return getLibraryUtil().getUserIdFromResetToken(token);
     }
+
+    public String getJtiFromResetToken(String token) {
+        return getLibraryUtil().getJtiFromResetToken(token);
+    }
 }

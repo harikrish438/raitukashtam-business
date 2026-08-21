@@ -117,6 +117,7 @@ twofactor:
   api:
     key: ${TWOFACTOR_API_KEY:}
     url: "https://2factor.in/API/V1/%s/SMS/%s/AUTOGEN"
+    verify-url: "https://2factor.in/API/V1/%s/SMS/VERIFY/%s/%s"
 
 security:
   login:

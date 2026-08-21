@@ -1,6 +1,7 @@
 package com.raitukashtam.auth.controller;
 
 import com.raitukashtam.auth.entity.User;
+import com.raitukashtam.auth.request.PlatformAdminRequest;
 import com.raitukashtam.auth.request.RegisterRequest;
 import com.raitukashtam.auth.response.UserResponse;
 import com.raitukashtam.auth.service.UserService;
@@ -10,7 +11,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/users")
@@ -40,5 +40,11 @@ public class UserController {
     @GetMapping
     public ResponseEntity<List<UserResponse>> getAllUsers() {
         return ResponseEntity.ok(userService.getAllUsers());
+    }
+
+    @PatchMapping("/{id}/platform-admin")
+    public ResponseEntity<UserResponse> setPlatformAdmin(@PathVariable("id") Long userId,
+                                                           @Valid @RequestBody PlatformAdminRequest request) {
+        return ResponseEntity.ok(userService.setPlatformAdmin(userId, request.getPlatformAdmin()));
     }
 }

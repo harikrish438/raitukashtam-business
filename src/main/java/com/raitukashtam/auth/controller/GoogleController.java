@@ -19,10 +19,19 @@ import com.raitukashtam.auth.repository.IdentityRepository;
 import com.raitukashtam.auth.repository.ProductMembershipRepository;
 import com.raitukashtam.auth.repository.ProductRepository;
 import com.raitukashtam.auth.repository.UserRepository;
+import com.raitukashtam.auth.service.RateLimiterService;
 import com.raitukashtam.auth.service.RoleService;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
@@ -30,6 +39,7 @@ import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.time.LocalDateTime;
 import java.util.Collections;
+import java.util.List;
 
 @RestController
 @RequestMapping("/google")
@@ -48,10 +58,15 @@ public class GoogleController {
     private final ProductRepository productRepository;
     private final ProductMembershipRepository productMembershipRepository;
     private final RoleService roleService;
+    private final RateLimiterService rateLimiterService;
+    private final SecurityContextRepository securityContextRepository;
 
     @PostMapping("/verify-token")
     @Transactional
-    public ResponseEntity<?> verifyGoogleToken(@RequestParam String idToken) {
+    public ResponseEntity<?> verifyGoogleToken(@RequestParam String idToken,
+                                                HttpServletRequest httpRequest, HttpServletResponse httpResponse) {
+        rateLimiterService.checkLimit("google-verify", httpRequest, 20, java.time.Duration.ofHours(1));
+
         GoogleIdTokenVerifier verifier = new GoogleIdTokenVerifier.Builder(new NetHttpTransport(), new GsonFactory())
                 .setAudience(Collections.singletonList(googleClientId))
                 .build();
@@ -104,14 +119,26 @@ public class GoogleController {
             throw new AccountLockedException("Account is locked. Please contact support.");
         }
 
-        // The identity/credential is verified and linked above, but Phase 4b
-        // retired direct token issuance in favor of Spring Authorization
-        // Server's Authorization Code + PKCE flow, which needs Google
-        // registered as an upstream IdP on the /login page -- separate,
-        // not-yet-done follow-up work (flagged explicitly, not silently
-        // left half-working).
-        return ResponseEntity.status(501)
-                .body("Google sign-in token issuance not yet available -- pending Authorization Code integration");
+        // Phase 4b retired direct token issuance in favor of Spring
+        // Authorization Server's Authorization Code + PKCE flow, which has
+        // no API for "mint a token for this already-authenticated
+        // principal" outside that flow. Instead: authenticate the current
+        // browser session exactly the way a successful /login does (same
+        // principal shape as IdentityAuthenticationProvider -- the identity
+        // UUID via a plain UsernamePasswordAuthenticationToken), and let the
+        // frontend continue with the SAME /oauth2/authorize request it
+        // already uses for password login. With the session now
+        // authenticated, /oauth2/authorize proceeds straight to issuing a
+        // code instead of redirecting to /login.
+        UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
+                identity.getId().toString(), null, List.<GrantedAuthority>of(new SimpleGrantedAuthority("ROLE_USER")));
+
+        SecurityContext context = SecurityContextHolder.createEmptyContext();
+        context.setAuthentication(authentication);
+        SecurityContextHolder.setContext(context);
+        securityContextRepository.saveContext(context, httpRequest, httpResponse);
+
+        return ResponseEntity.ok().build();
     }
 
     private Identity createIdentity(String email) {
