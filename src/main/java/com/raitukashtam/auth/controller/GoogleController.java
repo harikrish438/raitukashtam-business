@@ -1,9 +1,5 @@
 package com.raitukashtam.auth.controller;
 
-import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
-import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier;
-import com.google.api.client.http.javanet.NetHttpTransport;
-import com.google.api.client.json.gson.GsonFactory;
 import com.raitukashtam.auth.entity.CredentialType;
 import com.raitukashtam.auth.entity.Identity;
 import com.raitukashtam.auth.entity.IdentityCredential;
@@ -20,6 +16,8 @@ import com.raitukashtam.auth.repository.ProductMembershipRepository;
 import com.raitukashtam.auth.repository.ProductRepository;
 import com.raitukashtam.auth.repository.UserRepository;
 import com.raitukashtam.auth.config.OpenApiConfig;
+import com.raitukashtam.auth.security.GooglePayload;
+import com.raitukashtam.auth.security.GoogleTokenVerifierService;
 import com.raitukashtam.auth.service.RateLimiterService;
 import com.raitukashtam.auth.service.RoleService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -38,23 +36,19 @@ import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
-import java.io.IOException;
-import java.security.GeneralSecurityException;
 import java.time.LocalDateTime;
-import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/google")
 @RequiredArgsConstructor
 public class GoogleController {
 
-    @Value("${google.client-id}")
-    private String googleClientId;
-
     @Value("${raitukashtam.default-product-code}")
     private String defaultProductCode;
 
+    private final GoogleTokenVerifierService googleTokenVerifierService;
     private final IdentityRepository identityRepository;
     private final IdentityCredentialRepository identityCredentialRepository;
     private final UserRepository userRepository;
@@ -76,26 +70,21 @@ public class GoogleController {
                                                 HttpServletRequest httpRequest, HttpServletResponse httpResponse) {
         rateLimiterService.checkLimit("google-verify", httpRequest, 20, java.time.Duration.ofHours(1));
 
-        GoogleIdTokenVerifier verifier = new GoogleIdTokenVerifier.Builder(new NetHttpTransport(), new GsonFactory())
-                .setAudience(Collections.singletonList(googleClientId))
-                .build();
-
-        GoogleIdToken googleIdToken;
+        GooglePayload payload;
         try {
-            googleIdToken = verifier.verify(idToken);
-        } catch (GeneralSecurityException | IOException e) {
+            Optional<GooglePayload> verified = googleTokenVerifierService.verify(idToken);
+            if (verified.isEmpty()) {
+                return ResponseEntity.badRequest().body("Invalid ID token");
+            }
+            payload = verified.get();
+        } catch (GoogleTokenVerifierService.GoogleVerificationException e) {
             return ResponseEntity.internalServerError().body("Error verifying token: " + e.getMessage());
         }
 
-        if (googleIdToken == null) {
-            return ResponseEntity.badRequest().body("Invalid ID token");
-        }
-
-        GoogleIdToken.Payload payload = googleIdToken.getPayload();
-        String googleSubject = payload.getSubject();
-        String email = payload.getEmail();
-        String name = (String) payload.get("name");
-        boolean emailVerified = Boolean.TRUE.equals(payload.getEmailVerified());
+        String googleSubject = payload.subject();
+        String email = payload.email();
+        String name = payload.name();
+        boolean emailVerified = payload.emailVerified();
 
         IdentityCredential existingCredential = identityCredentialRepository
                 .findByCredentialTypeAndExternalSubject(CredentialType.GOOGLE, googleSubject)
