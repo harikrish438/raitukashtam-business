@@ -9,8 +9,22 @@ import static org.assertj.core.api.Assertions.assertThat;
 class SmokeApiTest extends AbstractIntegrationTest {
 
     @Test
-    void actuatorHealthIsUp() {
-        ResponseEntity<String> response = restTemplate.getForEntity(baseUrl("/actuator/health"), String.class);
+    void actuatorHealthIsUp() throws InterruptedException {
+        // Spring's TestContext framework guarantees the context (including
+        // finishRefresh()) is fully up before any @Test method runs, but on
+        // a slower/shared CI CPU the very first HTTP request right after
+        // that can still catch a health indicator mid-first-check -- 503
+        // seen live in GitHub Actions (not locally), gone by the very next
+        // request in this same class. A short retry, not a longer timeout,
+        // since the state it's waiting on settles in well under a second.
+        ResponseEntity<String> response = null;
+        for (int attempt = 1; attempt <= 5; attempt++) {
+            response = restTemplate.getForEntity(baseUrl("/actuator/health"), String.class);
+            if (response.getStatusCode().value() == 200) {
+                break;
+            }
+            Thread.sleep(300);
+        }
         assertThat(response.getStatusCode().value()).isEqualTo(200);
         assertThat(response.getBody()).contains("\"status\":\"UP\"");
     }
