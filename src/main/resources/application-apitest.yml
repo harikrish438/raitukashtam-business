@@ -108,6 +108,20 @@ management:
     port: 18080
   tracing:
     enabled: false
+  health:
+    # spring-cloud-starter-vault-config auto-configures a health indicator
+    # that pings spring.cloud.vault.host:port regardless of whether Vault
+    # was actually used for config import -- this profile deliberately
+    # never imports from Vault, but the indicator still ran and reported
+    # DOWN (connection refused) in CI. Passed "locally" only by accident:
+    # this machine's own long-running dev Vault container happens to also
+    # listen on localhost:8200, which the health check silently hit
+    # instead -- not real isolation, confirmed by CI (no such incidental
+    # Vault) correctly failing where local silently didn't. Same pattern
+    # as management.health.redis.enabled: false already used in
+    # application.yml for the same class of problem.
+    vault:
+      enabled: false
 
 logging:
   level:
