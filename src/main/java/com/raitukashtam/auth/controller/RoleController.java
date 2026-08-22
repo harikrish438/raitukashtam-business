@@ -1,8 +1,11 @@
 package com.raitukashtam.auth.controller;
 
+import com.raitukashtam.auth.config.OpenApiConfig;
 import com.raitukashtam.auth.request.RoleRequest;
 import com.raitukashtam.auth.response.RoleResponse;
 import com.raitukashtam.auth.service.RoleService;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -14,6 +17,8 @@ import java.util.List;
 @RestController
 @RequestMapping("/products/{productCode}/roles")
 @RequiredArgsConstructor
+@Tag(name = OpenApiConfig.TAG_PLATFORM_ADMIN)
+@SecurityRequirement(name = "bearerAuth")
 public class RoleController {
     private final RoleService roleService;
 

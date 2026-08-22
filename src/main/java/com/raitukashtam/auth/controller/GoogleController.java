@@ -19,8 +19,11 @@ import com.raitukashtam.auth.repository.IdentityRepository;
 import com.raitukashtam.auth.repository.ProductMembershipRepository;
 import com.raitukashtam.auth.repository.ProductRepository;
 import com.raitukashtam.auth.repository.UserRepository;
+import com.raitukashtam.auth.config.OpenApiConfig;
 import com.raitukashtam.auth.service.RateLimiterService;
 import com.raitukashtam.auth.service.RoleService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -63,6 +66,12 @@ public class GoogleController {
 
     @PostMapping("/verify-token")
     @Transactional
+    @Tag(name = OpenApiConfig.TAG_SELF_SERVICE)
+    @Operation(summary = "Verify a Google ID token and authenticate the browser session",
+            description = "Public, unauthenticated -- called by the frontend with a real Google ID "
+                    + "token obtained via Google Identity Services. On success, creates/links an "
+                    + "Identity and establishes an authenticated session; the frontend then continues "
+                    + "with the same /oauth2/authorize request it already uses for password login.")
     public ResponseEntity<?> verifyGoogleToken(@RequestParam String idToken,
                                                 HttpServletRequest httpRequest, HttpServletResponse httpResponse) {
         rateLimiterService.checkLimit("google-verify", httpRequest, 20, java.time.Duration.ofHours(1));

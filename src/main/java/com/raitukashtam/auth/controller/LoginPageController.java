@@ -3,6 +3,7 @@ package com.raitukashtam.auth.controller;
 import com.raitukashtam.auth.entity.User;
 import com.raitukashtam.auth.service.LoginAttemptService;
 import com.raitukashtam.auth.service.UserService;
+import io.swagger.v3.oas.annotations.Hidden;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Controller;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestParam;
  * existing captcha-after-N-attempts protocol needs a widget slot.
  */
 @Controller
+@Hidden
 public class LoginPageController {
 
     @Autowired

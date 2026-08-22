@@ -99,7 +99,9 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/actuator/**").permitAll()
                         .requestMatchers("/login").permitAll()
+                        .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .requestMatchers(HttpMethod.GET, "/users").hasRole("PLATFORM_ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/users/*").authenticated()
                         .requestMatchers(HttpMethod.PATCH, "/users/*/platform-admin").hasRole("PLATFORM_ADMIN")
                         .requestMatchers("/products/**").hasRole("PLATFORM_ADMIN")
                         .requestMatchers("/**").permitAll()

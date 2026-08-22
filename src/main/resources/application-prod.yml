@@ -8,6 +8,15 @@ spring:
       ddl-auto: validate
     show-sql: false
 
+# Swagger UI/OpenAPI docs are permitAll (needed for the docs page itself to
+# load), which hands anyone who can reach this service a map of the API
+# surface. Fine in dev/test; disabled here since prod is internet-facing.
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
 management:
   tracing:
     sampling:

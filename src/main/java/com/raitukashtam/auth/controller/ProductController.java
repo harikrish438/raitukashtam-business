@@ -1,8 +1,11 @@
 package com.raitukashtam.auth.controller;
 
+import com.raitukashtam.auth.config.OpenApiConfig;
 import com.raitukashtam.auth.request.ProductRequest;
 import com.raitukashtam.auth.response.ProductResponse;
 import com.raitukashtam.auth.service.ProductService;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -14,6 +17,8 @@ import java.util.List;
 @RestController
 @RequestMapping("/products")
 @RequiredArgsConstructor
+@Tag(name = OpenApiConfig.TAG_PLATFORM_ADMIN)
+@SecurityRequirement(name = "bearerAuth")
 public class ProductController {
     private final ProductService productService;
 
