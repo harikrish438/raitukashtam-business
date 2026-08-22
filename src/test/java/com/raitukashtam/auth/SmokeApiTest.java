@@ -25,7 +25,9 @@ class SmokeApiTest extends AbstractIntegrationTest {
             }
             Thread.sleep(300);
         }
-        assertThat(response.getStatusCode().value()).isEqualTo(200);
+        assertThat(response.getStatusCode().value())
+                .as("health check body: %s", response.getBody())
+                .isEqualTo(200);
         assertThat(response.getBody()).contains("\"status\":\"UP\"");
     }
 
