@@ -54,10 +54,10 @@ story that the API surface alone doesn't explain.
 
 What it deliberately does **not** own: fine-grained permissions/policy
 (each product's own services decide what a role can actually do),
-product business data, and — as of the Phase 4 rewrite — it is no longer
-the party that issues raw HMAC JWTs via `jwt-library` for anything except
-password-reset tokens; real user/service tokens are RS256, signed via a
-JWKS endpoint any resource server can validate against independently.
+product business data, and — as of the Phase 4 rewrite — it no longer
+issues raw HMAC JWTs for anything except password-reset tokens; real
+user/service tokens are RS256, signed via a JWKS endpoint any resource
+server can validate against independently.
 
 ## Architecture
 
@@ -152,8 +152,9 @@ response/    API request/response DTOs (validation annotations live on
              the request DTOs)
 dto/         A handful of older request DTOs from before the
              request/response split was consistently applied
-jwt/         JwtTokenUtil (jwt-library-backed) — password-reset tokens
-             only; everything else moved to Spring AS/RS256 in Phase 4
+jwt/         JwtTokenUtil (auth0 java-jwt directly) — password-reset
+             tokens only; everything else moved to Spring AS/RS256 in
+             Phase 4
 exception/   Domain exceptions + GlobalExceptionHandler (the
              @ExceptionHandler → HTTP status mapping)
 scheduler/   TokenCleanupTask — daily pruning of expired
@@ -350,7 +351,7 @@ session, not a separate token-issuance path.
 
 `POST /forgot-password` (email in, always `200` regardless of whether
 the email is registered — doesn't leak account existence) →
-`jwt-library`-issued HMAC reset token, emailed → `POST /reset-password`
+HMAC reset token, emailed → `POST /reset-password`
 (token + new password) validates and consumes it. Single-use, enforced
 via the `used_password_reset_token` ledger keyed by the token's `jti` —
 replaying the same token returns `400`.
@@ -598,10 +599,13 @@ clients via the same code paths the real endpoints use), `WireMockStubs`
   the multi-product schema is real and tested (see
   `ProductControllerApiTest`, `ClientControllerApiTest`), but no second
   product exists yet in any environment.
-- **`jwt-library`'s only remaining use here is password-reset tokens** —
-  everything else moved to Spring AS/RS256/JWKS in Phase 4. If you're
-  looking for where access tokens get signed, it's
-  `AuthorizationServerConfig`/the JWKS endpoint, not `jwt-library`.
+- **HMAC JWTs (`jwt/JwtTokenUtil.java`) are only used for password-reset
+  tokens** — everything else moved to Spring AS/RS256/JWKS in Phase 4. If
+  you're looking for where access tokens get signed, it's
+  `AuthorizationServerConfig`/the JWKS endpoint. There is no separate
+  `jwt-library` module in this repo (removed 2026-08-25) — the
+  password-reset HMAC logic is inlined directly here via
+  `com.auth0:java-jwt`.
 - Full list of open items, with more operational/deployment detail:
   see `docs/design/multi-product-identity-platform.md` and this
   project's own memory/known-issues tracking (not part of this repo).

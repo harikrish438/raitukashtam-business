@@ -2,10 +2,6 @@
 FROM maven:3.9.6-eclipse-temurin-21-alpine AS build
 WORKDIR /app
 
-# Copy and build jwt-library first
-COPY jwt-library ./jwt-library
-RUN cd jwt-library && mvn clean install -DskipTests
-
 # Copy only the files needed to download dependencies
 COPY auth-service/pom.xml .
 # Download dependencies
