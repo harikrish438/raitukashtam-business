@@ -1,0 +1,27 @@
+name: Auth CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "backend/auth-service/**"
+  pull_request:
+    paths:
+      - "backend/auth-service/**"
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Build and test auth-service
+        run: mvn -B verify
+        working-directory: backend/auth-service

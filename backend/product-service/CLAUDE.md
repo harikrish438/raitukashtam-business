@@ -10,7 +10,10 @@ specific to `product-service`.
   `docker-compose.yml`; port 5433 if run locally via
   `docker-compose.local-postgres.yml`)
 - Endpoints: `POST /api/v1/products/`, `GET /api/v1/products/{productId}`
-- Calls auth-service (platform repo) via load-balanced RestTemplate to fetch user details
+- Calls `auth-service` (this repo's own `backend/auth-service`) via a plain
+  `RestTemplate` at its Docker Compose hostname (`http://auth-service:8080`)
+  to fetch user details — no Eureka/service discovery involved (dropped
+  2026-08-27, see repo-root `CLAUDE.md`)
 - Validates JWT using `jwt-library` (`com.raitukashtam:jwt-library`,
   currently pinned to `1.0.0` in `pom.xml`), resolved from GitHub Packages
   (see repo-root `CLAUDE.md` for the auth setup and version-bump process)
@@ -33,8 +36,10 @@ backend/product-service/
 
 ## Running Docker Compose
 
-All commands run from this directory (`backend/product-service/`). The
-platform stack must already be running first (see repo-root `CLAUDE.md`).
+All commands run from this directory (`backend/product-service/`). This
+repo's own root shared-infra stack (Vault + Redis + `raitukashtam-network`)
+must already be running first — see repo-root `CLAUDE.md`. There is no
+dependency on the raitukashtam platform repo's stack.
 
 ```sh
 cp .env.example .env               # fill in PRODUCT_DB_PASSWORD, VAULT_TOKEN, GITHUB_TOKEN

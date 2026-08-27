@@ -2,7 +2,6 @@ spring:
   config:
     import:
       - "optional:vault://"
-      - "optional:configserver:${CONFIG_SERVER_URL:http://localhost:9002}/config"
   jpa:
     hibernate:
       ddl-auto: validate

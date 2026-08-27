@@ -1,0 +1,87 @@
+# DEV environment — shared infrastructure for raitukashtam-business
+# (Vault + Redis + the raitukashtam-network that auth-service and
+# product-service both join). Bring this up FIRST, from the repo root:
+#   docker compose up -d
+# Then bring up each service from its own directory (see backend/<service>/
+# docker-compose.yml) — they reference this network as external.
+#
+# Requires: .env file (copy from .env.example).
+#
+# This repo owns this infra itself — it does not depend on, and does not
+# need, the raitukashtam platform repo's stack.
+name: raitukashtam-business-dev
+
+networks:
+  raitukashtam-network:
+    driver: bridge
+    name: raitukashtam-network
+
+volumes:
+  business-redis-data:
+
+services:
+
+  # HashiCorp Vault — dev mode (in-memory, auto-unsealed)
+  vault:
+    image: hashicorp/vault:1.17
+    container_name: vault
+    restart: unless-stopped
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: ${VAULT_TOKEN:-raitukashtam-vault-token}
+      VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
+      TZ: Asia/Kolkata
+    ports:
+      - "8200:8200"
+    cap_add:
+      - IPC_LOCK
+    networks:
+      - raitukashtam-network
+    healthcheck:
+      test: ["CMD", "vault", "status", "-address=http://localhost:8200"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # One-shot container that seeds Vault with secrets from .env
+  vault-init:
+    image: hashicorp/vault:1.17
+    container_name: vault-init
+    restart: "no"
+    depends_on:
+      vault:
+        condition: service_healthy
+    environment:
+      VAULT_ADDR: http://vault:8200
+      VAULT_TOKEN: ${VAULT_TOKEN:-raitukashtam-vault-token}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required in .env}
+      JWT_SIGNING_KEY_PRIVATE: ${JWT_SIGNING_KEY_PRIVATE:?JWT_SIGNING_KEY_PRIVATE is required in .env}
+      JWT_SIGNING_KEY_PUBLIC: ${JWT_SIGNING_KEY_PUBLIC:?JWT_SIGNING_KEY_PUBLIC is required in .env}
+      AUTH_DB_PASSWORD: ${AUTH_DB_PASSWORD:?AUTH_DB_PASSWORD is required in .env}
+      PRODUCT_DB_PASSWORD: ${PRODUCT_DB_PASSWORD:?PRODUCT_DB_PASSWORD is required in .env}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required in .env}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:?MAIL_PASSWORD is required in .env}
+      RECAPTCHA_SECRET_KEY: ${RECAPTCHA_SECRET_KEY:?RECAPTCHA_SECRET_KEY is required in .env}
+      TWOFACTOR_API_KEY: ${TWOFACTOR_API_KEY:?TWOFACTOR_API_KEY is required in .env}
+    volumes:
+      - ./infra/vault/vault-init.sh:/vault-init.sh:ro
+    entrypoint: ["/bin/sh", "/vault-init.sh"]
+    networks:
+      - raitukashtam-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD:-your_redis_password}
+    ports:
+      - "6379:6379"
+    volumes:
+      - business-redis-data:/data
+    networks:
+      - raitukashtam-network
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD:-your_redis_password} ping | grep PONG"]
+      interval: 5s
+      timeout: 30s
+      retries: 5

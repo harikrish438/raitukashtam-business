@@ -2,9 +2,10 @@
 # run with (from this directory, backend/product-service/):
 #   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
 # Requires: .env.prod file, a GITHUB_TOKEN env var with read:packages scope,
-#   and the raitukashtam platform prod stack already running
+#   and this repo's own shared-infra prod stack already running
 #   (docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
-#   in the raitukashtam repo) since this stack joins its network.
+#   from the repo root) since this stack joins its Vault/Redis/network —
+#   no dependency on the raitukashtam platform repo.
 networks:
   raitukashtam-network:
     external: true
@@ -63,10 +64,6 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://product-postgres:5432/product-service-db?currentSchema=public&stringtype=unspecified&TimeZone=Asia/Kolkata
       SPRING_DATASOURCE_USERNAME: product-service-user
       AUTH_SERVICE_URL: http://auth-service:8080
-      EUREKA_URL: http://discovery-service:8761/eureka/
-      EUREKA_INSTANCE_HOSTNAME: product-service
-      ZIPKIN_URL: http://zipkin:9411/api/v2/spans
-      CONFIG_SERVER_URL: http://config-server-service:9002
     ports:
       - "8081:8081"
     networks:

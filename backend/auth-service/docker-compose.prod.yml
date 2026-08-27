@@ -1,0 +1,83 @@
+# PROD environment — auth-service
+# run with (from this directory, backend/auth-service/):
+#   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
+# Requires: .env.prod file, and this repo's own shared-infra prod stack
+# already running (docker compose -f docker-compose.prod.yml --env-file
+# .env.prod up -d from the repo root) since this stack joins its
+# Vault/Redis/raitukashtam-network — no dependency on the raitukashtam
+# platform repo.
+networks:
+  raitukashtam-network:
+    external: true
+    name: raitukashtam-network
+
+volumes:
+  auth-pgdata-prod:
+
+services:
+
+  auth-postgres:
+    image: postgres:15
+    container_name: auth-postgres-prod
+    restart: always
+    environment:
+      POSTGRES_DB: jwt_auth_db
+      POSTGRES_USER: jwt_user
+      POSTGRES_PASSWORD: ${AUTH_DB_PASSWORD:?AUTH_DB_PASSWORD is required in .env.prod}
+      TZ: Asia/Kolkata
+      PGTZ: Asia/Kolkata
+    command: ["postgres", "-c", "timezone=Asia/Kolkata", "-c", "log_timezone=Asia/Kolkata", "-c", "max_connections=200"]
+    volumes:
+      - auth-pgdata-prod:/var/lib/postgresql/data
+    networks:
+      - raitukashtam-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jwt_user -d jwt_auth_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+
+  auth-service:
+    build:
+      context: .
+    container_name: auth-service-prod
+    restart: always
+    depends_on:
+      auth-postgres:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      VAULT_HOST: vault-prod
+      VAULT_TOKEN: ${VAULT_TOKEN:?VAULT_TOKEN is required in .env.prod}
+      SPRING_CLOUD_VAULT_KV_DEFAULT_CONTEXT: auth-service
+      SPRING_DATASOURCE_URL: jdbc:postgresql://auth-postgres-prod:5432/jwt_auth_db?currentSchema=public&stringtype=unspecified&TimeZone=Asia/Kolkata
+      SPRING_DATASOURCE_USERNAME: jwt_user
+      SPRING_REDIS_HOST: redis-prod
+      SPRING_REDIS_PORT: 6379
+      SPRING_REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required in .env.prod}
+      MAIL_USERNAME: ${MAIL_USERNAME:?MAIL_USERNAME is required in .env.prod}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      RECAPTCHA_SITE_KEY: ${RECAPTCHA_SITE_KEY:-}
+      WEB_CLIENT_REDIRECT_URI: ${WEB_CLIENT_REDIRECT_URI:?WEB_CLIENT_REDIRECT_URI is required in .env.prod}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?CORS_ALLOWED_ORIGINS is required in .env.prod}
+      APP_BASE_URL: ${APP_BASE_URL:?APP_BASE_URL is required in .env.prod}
+    ports:
+      - "8080:8080"
+    networks:
+      - raitukashtam-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G

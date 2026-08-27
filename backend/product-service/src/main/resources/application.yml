@@ -5,9 +5,6 @@ server:
 spring:
   application:
     name: product-service
-  tracing:
-    propagation:
-      type: w3c
   main:
     time-zone: Asia/Kolkata
   cloud:
@@ -23,10 +20,6 @@ spring:
         enabled: true
         backend: secret
         default-context: product-service
-    discovery:
-      enabled: true
-    loadbalancer:
-      enabled: true
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5433/product-service-db?currentSchema=public&stringtype=unspecified&TimeZone=Asia/Kolkata}
     username: ${SPRING_DATASOURCE_USERNAME:product-service-user}
@@ -49,21 +42,6 @@ spring:
         jdbc:
           time_zone: Asia/Kolkata
 
-eureka:
-  client:
-    register-with-eureka: true
-    fetch-registry: true
-    service-url:
-      default-zone: ${EUREKA_URL:http://localhost:8761/eureka/}
-    enabled: true
-    registry-fetch-interval-seconds: 30
-  instance:
-    hostname: ${EUREKA_INSTANCE_HOSTNAME:localhost}
-    prefer-ip-address: true
-    lease-renewal-interval-in-seconds: 30
-    lease-expiration-duration-in-seconds: 90
-    appname: product-service
-
 jwt:
   secret: ${JWT_SECRET:your-secret-key-change-this-in-production}
   issuer: raitukashtam
@@ -75,13 +53,6 @@ auth:
     url: ${AUTH_SERVICE_URL:http://localhost:8080}
 
 management:
-  tracing:
-    enabled: true
-    sampling:
-      probability: 1.0
-  zipkin:
-    tracing:
-      endpoint: ${ZIPKIN_URL:http://localhost:9411/api/v2/spans}
   endpoints:
     web:
       exposure:
