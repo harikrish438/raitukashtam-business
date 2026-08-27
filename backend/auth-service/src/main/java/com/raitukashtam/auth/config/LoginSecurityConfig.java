@@ -1,0 +1,19 @@
+package com.raitukashtam.auth.config;
+
+import lombok.Getter;
+import lombok.Setter;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.context.annotation.Configuration;
+
+import java.time.Duration;
+
+@Setter
+@Getter
+@Configuration
+@ConfigurationProperties(prefix = "security.login")
+public class LoginSecurityConfig {
+    private int maxAttempts = 5;
+    private int captchaRequiredAfterAttempts = 3;
+    private Duration lockoutDuration = Duration.ofMinutes(30);
+    private Duration failureWindow = Duration.ofMinutes(15);
+}

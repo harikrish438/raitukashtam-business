@@ -1,0 +1,129 @@
+# Automated API-test profile (mvn test / CI). NOT the "test" staging
+# environment (application-test.yml) -- deliberately a different name so
+# there's no confusion between "run the automated test suite" and "deploy
+# to the staging server." No spring.config.import here at all, so Vault
+# and Config Server are never contacted -- everything this profile needs
+# is either a checked-in dummy value below or injected dynamically by
+# AbstractIntegrationTest (Testcontainers Postgres/Redis via
+# @ServiceConnection, WireMock URLs for 2Factor/reCAPTCHA via
+# @DynamicPropertySource).
+#
+# Fixed port, not RANDOM_PORT: tried RANDOM_PORT first (needed since
+# @MockBean-using test classes fork a distinct Spring context, and two
+# contexts sharing one fixed port collided -- confirmed live). That hit a
+# harder wall: app.base-url's ${local.server.port} is consumed by
+# AuthorizationServerConfig's eager @Value field injection, which resolves
+# during finishBeanFactoryInitialization() -- BEFORE
+# ServletWebServerApplicationContext.finishRefresh() actually starts the
+# web server and publishes local.server.port, so the placeholder can never
+# resolve in time ("Could not resolve placeholder 'local.server.port'",
+# confirmed live). Fixed properly by removing the context fork instead
+# (AbstractIntegrationTest registers Google/Email test doubles as
+# permanent @Primary beans, not @MockBean) -- every test class now shares
+# one identical context, so a fixed port is safe again.
+server:
+  port: 18080
+
+spring:
+  # spring-cloud-starter-config's ConfigDataMissingEnvironmentPostProcessor
+  # refuses to start at all without a spring.config.import entry present
+  # SOMEWHERE, even to explicitly say "none needed" -- this is the exact
+  # long-standing "contextLoads fails in CI" gap from project memory
+  # (no SPRING_PROFILES_ACTIVE set, so no profile YAML's import list ever
+  # applied). import-check.enabled: false is Spring Cloud Config's own
+  # documented escape hatch for "this profile deliberately imports
+  # nothing" instead of needing a fake optional:configserver: entry.
+  cloud:
+    config:
+      enabled: false
+      import-check:
+        enabled: false
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+  mail:
+    host: localhost
+    port: 3025
+    username: test@example.com
+    password: test
+  datasource:
+    hikari:
+      # application.yml's "SET TIME ZONE 'Asia/Kolkata'" fails against this
+      # Testcontainers postgres:15 image with "invalid value for parameter
+      # \"TimeZone\": \"Asia/Calcutta\"" -- pgjdbc translates the zone id to
+      # its pre-2006 alias internally for this init-sql path, and this
+      # image's tzdata doesn't recognize it (dev's longer-lived local image
+      # apparently does -- an image-vintage difference, not a real app bug;
+      # not worth chasing further since these tests don't verify timezone
+      # handling). Blank clears the base application.yml value for this
+      # profile instead of running it at all.
+      connection-init-sql:
+
+# Same dev-only default keypair as application-dev.yml -- fine to reuse
+# here too, it was never a real secret. Regenerate independently if it
+# ever needs to change; these two files don't share state.
+jwt:
+  signing-key:
+    private-key: MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7L4oxzIHZds1RfKSuE0nNq8zFCHI86uY6D61jxhnHToSCrPnYZ/J2rkuTWnhk8fML9rTAjlNuRdB8jrCDkvisx30ZGD/1mzhjzszQBaucKeD2NxfzeoZPO9zk5s3lnFxZ8IQw8n5wn0FrZAuJdTOZVPxqELTRSvP9FB7sHlEgioVdbC31qikWtjcB+Gk5jzGOgu7J1te1XOENYD65jc7qpG0z7nJDzjmEp1d9tG+/gHo88Pvd2g2NEu4qKo/sjieJQH9MquitkWJ2dMbstMUrTCRgKD5OvhXlf/XHZ1v783cyBzsI7Wyy43uJ6Zu+SkrCsU8WHDPQrriIW8IoSq3RAgMBAAECggEABcPNLWMzYRGK+X5dmoRazqgivHM6BHUGDeX3dLYQS254P4eJAtCRu7S6vGEqCc7XScgpcTA48tGY3gstdcHoIXcb29LevmdPRWikL2hrTHoQNPkFpnCgtA4/i3etwetuvzDce17uhLSs6LwqLEu1IPzocLJOxU7aBJJy8NnurPI1sZdOxl01hJQGSepjx/iWIEKDJLEoHrOwt2xLnzfqJqi/RggNEhDO5bkQ+bvX0bvYmqiSG+7ErRTT28bjfsRulL0RMGzs5qf8oaJdAalB2nopckdTt7FmqrZX/i++DEYRIXYZi6k/muorCCnS4R+2GrxTl+qaUJEx/vIZD3C1GQKBgQDlJ8XMvyWEALFOc8BWudWPb+6jOBKkDvxhZZMzs33kgsbpoQTsfvfnemCh++NHa8oLdMi2gxYe8v1sqE/H75b6L67ALt81nJrjRXjhlmI5UacffFwhWUYLDFm+LHRy1HGG5UfUT+l5Wfy5oBB5Dyd/Eer/VxsQvWnUNt4+LQCdiQKBgQDRHR+CDqWCkP7yvdrCqITv324E7aLN/nS9OCc3glsEst6FdPhBDqeOC3xZzJvtg3X1NdDAs2wqGz+zsFcDU7a/ncGCTNIsmGOV9Wt+FzRfpncA7w0JgMgj8neiifiCYmxvu78RRDYAKyifh+sb35dT6u/nPDaFXdCfvww4PZcECQKBgQDEnqOxUjE2WgHIdrkJsNn1AO2ZTntwGQuj5iuvqMrUTwGtZGN9KFQ9YVuYoTAaD/qEaeft8fwBAi1AFgqeWo0IjfE7JPyQW5bqeqmFpisRU2Y6NdI3KwpWYHqAGlSwUmg2fnRrT0XcwcF+5EA+HyqcdRtVi7/FVUCAvbNjVem5QQKBgGQWlGYjrIR58g0tYe+ZyUcmofop46rFCAspPVwMQJRXKLqn6cr5wKj0RmiUzm04ZtUfFPOm7TaaJDtVQ9CL2QSN9XjwXAiMR94WwYRwhtjhTEReJtdNlH3gJ/LcJt4BTfWM3z7cbxxVi/QPkjCdLEk2Qe1jnJTo+ln7j1W75PRBAoGAJ9dyUW5Z3XvGX6rdTBdAZuwIgAorKBe5Nt/z1ISuQi3D2WQ6o+BIw3M3lv78q/bqTRoXTJTGj0s20seFee3UIPsOM+Annu7JsOTkvan1nrmPvm6pJDYWTKyXh9EAxDW0R9jiZWMlJw9mQ23ct9EvebEbD2C/7h+HvUCYh28dYRU=
+    public-key: MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuy+KMcyB2XbNUXykrhNJzavMxQhyPOrmOg+tY8YZx06Egqz52Gfydq5Lk1p4ZPHzC/a0wI5TbkXQfI6wg5L4rMd9GRg/9Zs4Y87M0AWrnCng9jcX83qGTzvc5ObN5ZxcWfCEMPJ+cJ9Ba2QLiXUzmVT8ahC00Urz/RQe7B5RIIqFXWwt9aopFrY3AfhpOY8xjoLuydbXtVzhDWA+uY3O6qRtM+5yQ845hKdXfbRvv4B6PPD73doNjRLuKiqP7I4niUB/TKrorZFidnTG7LTFK0wkYCg+Tr4V5X/1x2db+/N3Mgc7CO1ssuN7iembvkpKwrFPFhwz0K64iFvCKEqt0QIDAQAB
+
+# twofactor.api.url/verify-url and google.recaptcha.verify-url are
+# overridden at runtime by AbstractIntegrationTest's @DynamicPropertySource
+# to point at the shared WireMock server -- these are just non-empty
+# placeholders so context startup never sees a blank @Value.
+twofactor:
+  api:
+    key: apitest-2factor-key
+
+google:
+  client-id: apitest-client-id.apps.googleusercontent.com
+  recaptcha:
+    site-key: apitest-site-key
+    secret-key: apitest-secret-key
+
+raitukashtam:
+  default-product-code: RAITUKASHTAM
+  default-product-name: Raitukashtam
+  web-client:
+    redirect-uri: http://localhost:3000/callback
+  cors:
+    allowed-origins: http://localhost:3000
+  platform-admin:
+    email: ""
+
+app:
+  base-url: http://localhost:18080/
+
+eureka:
+  client:
+    enabled: false
+
+management:
+  # application.yml hardcodes management.server.port: 8080, which would
+  # open a SECOND embedded server bound to 8080 regardless of server.port
+  # above -- colliding with dev's actual running Docker container on that
+  # port. Match server.port so it shares the one server instead.
+  server:
+    port: 18080
+  tracing:
+    enabled: false
+  health:
+    # spring-cloud-starter-vault-config auto-configures a health indicator
+    # that pings spring.cloud.vault.host:port regardless of whether Vault
+    # was actually used for config import -- this profile deliberately
+    # never imports from Vault, but the indicator still ran and reported
+    # DOWN (connection refused) in CI. Passed "locally" only by accident:
+    # this machine's own long-running dev Vault container happens to also
+    # listen on localhost:8200, which the health check silently hit
+    # instead -- not real isolation, confirmed by CI (no such incidental
+    # Vault) correctly failing where local silently didn't. Same pattern
+    # as management.health.redis.enabled: false already used in
+    # application.yml for the same class of problem.
+    vault:
+      enabled: false
+
+logging:
+  level:
+    org.springframework.security: WARN
+    com.raitukashtam: INFO

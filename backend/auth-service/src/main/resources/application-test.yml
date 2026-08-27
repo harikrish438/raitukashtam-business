@@ -1,0 +1,16 @@
+spring:
+  config:
+    import:
+      - "vault://"
+      - "optional:configserver:${CONFIG_SERVER_URL:http://localhost:9002}/config"
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+
+logging:
+  level:
+    org.springframework.web: INFO
+    com.raitukashtam: DEBUG
+    org.springframework.security: INFO
+    io.micrometer.tracing: INFO

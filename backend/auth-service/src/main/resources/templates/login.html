@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Sign in</title>
+    <script th:if="${captchaRequired}" src="https://www.google.com/recaptcha/api.js" async defer></script>
+    <style>
+        body { font-family: sans-serif; max-width: 320px; margin: 4em auto; }
+        label { display: block; margin-top: 1em; }
+        input[type=text], input[type=password] { width: 100%; padding: 0.4em; box-sizing: border-box; }
+        button { margin-top: 1.5em; padding: 0.5em 1.5em; }
+        .error { color: #b00020; }
+    </style>
+</head>
+<body>
+<h1>Sign in</h1>
+<p class="error" th:if="${error == 'bad_credentials'}">Invalid email, password, or verification. Please try again.</p>
+<p class="error" th:if="${error == 'captcha_required'}">Please complete the verification below and try again.</p>
+<form method="post" action="/login" id="loginForm">
+    <label for="username">Email</label>
+    <input type="text" id="username" name="username" th:value="${username}" required autofocus>
+
+    <label for="password">Password</label>
+    <input type="password" id="password" name="password" required>
+
+    <div th:if="${captchaRequired}" class="g-recaptcha" th:attr="data-sitekey=${recaptchaSiteKey}"></div>
+    <input th:if="${captchaRequired}" type="hidden" name="recaptchaToken" id="recaptchaToken">
+
+    <button type="submit">Sign in</button>
+</form>
+<script th:if="${captchaRequired}">
+    document.getElementById('loginForm').addEventListener('submit', function () {
+        document.getElementById('recaptchaToken').value = grecaptcha.getResponse();
+    });
+</script>
+</body>
+</html>

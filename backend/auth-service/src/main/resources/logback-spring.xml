@@ -1,0 +1,37 @@
+<configuration>
+
+    <springProperty scope="context" name="APP_NAME" source="spring.application.name" defaultValue="app"/>
+
+    <!-- DEV: colored, human-readable console -->
+    <springProfile name="dev">
+        <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder>
+                <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %highlight(%-5level) [%cyan(${APP_NAME})] [traceId=%X{traceId:-}, spanId=%X{spanId:-}] [%thread] %logger{36} - %msg%n</pattern>
+            </encoder>
+        </appender>
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
+
+    <!-- TEST / PROD: structured JSON to stdout -->
+    <springProfile name="!dev">
+        <appender name="JSON_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+                <fieldNames>
+                    <timestamp>timestamp</timestamp>
+                    <version>[ignore]</version>
+                    <levelValue>[ignore]</levelValue>
+                    <logger>logger</logger>
+                    <thread>thread</thread>
+                </fieldNames>
+                <customFields>{"service":"${APP_NAME}"}</customFields>
+                <timeZone>Asia/Kolkata</timeZone>
+            </encoder>
+        </appender>
+        <root level="INFO">
+            <appender-ref ref="JSON_CONSOLE"/>
+        </root>
+    </springProfile>
+
+</configuration>
