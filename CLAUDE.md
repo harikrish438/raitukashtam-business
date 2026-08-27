@@ -14,6 +14,17 @@ versions, local dev instructions) lives in that service's own
 `backend/<service>/CLAUDE.md` — read it too whenever you're working inside
 a specific service directory.
 
+## Session Tracking
+
+This repo is under active development toward a production deployment
+(currently: auth-service + product-service on AWS) and work continues
+across many sessions. `PROGRESS.md` at the repo root is the running log —
+read it at the start of a session for context on what's already done and
+what's still open, and update it (a new dated entry under "Sessions",
+plus "Status"/"Open items" if they changed) before ending a session or at
+a natural stopping point. This is default behavior for this repo — do it
+without being asked.
+
 ## Convention for Business Services
 
 Each service is fully self-contained under `backend/<service>/`:
