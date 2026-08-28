@@ -1,6 +1,6 @@
 # DEV environment — shared infrastructure for raitukashtam-business
 # (Vault + Redis + the raitukashtam-network that auth-service and
-# product-service both join). Bring this up FIRST, from the repo root:
+# mycommunity-service both join). Bring this up FIRST, from the repo root:
 #   docker compose up -d
 # Then bring up each service from its own directory (see backend/<service>/
 # docker-compose.yml) — they reference this network as external.
@@ -58,7 +58,7 @@ services:
       JWT_SIGNING_KEY_PRIVATE: ${JWT_SIGNING_KEY_PRIVATE:?JWT_SIGNING_KEY_PRIVATE is required in .env}
       JWT_SIGNING_KEY_PUBLIC: ${JWT_SIGNING_KEY_PUBLIC:?JWT_SIGNING_KEY_PUBLIC is required in .env}
       AUTH_DB_PASSWORD: ${AUTH_DB_PASSWORD:?AUTH_DB_PASSWORD is required in .env}
-      PRODUCT_DB_PASSWORD: ${PRODUCT_DB_PASSWORD:?PRODUCT_DB_PASSWORD is required in .env}
+      MYCOMMUNITY_DB_PASSWORD: ${MYCOMMUNITY_DB_PASSWORD:?MYCOMMUNITY_DB_PASSWORD is required in .env}
       REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required in .env}
       MAIL_PASSWORD: ${MAIL_PASSWORD:?MAIL_PASSWORD is required in .env}
       RECAPTCHA_SECRET_KEY: ${RECAPTCHA_SECRET_KEY:?RECAPTCHA_SECRET_KEY is required in .env}

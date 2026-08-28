@@ -17,7 +17,7 @@ a specific service directory.
 ## Session Tracking
 
 This repo is under active development toward a production deployment
-(currently: auth-service + product-service on AWS) and work continues
+(currently: auth-service + mycommunity-service on AWS) and work continues
 across many sessions. `PROGRESS.md` at the repo root is the running log —
 read it at the start of a session for context on what's already done and
 what's still open, and update it (a new dated entry under "Sessions",
@@ -45,7 +45,7 @@ see below) rather than duplicating a Vault+Redis pair per service. Bring
 this stack up first, before any individual service's stack.
 
 Current services:
-- `backend/product-service/` — see `backend/product-service/CLAUDE.md`
+- `backend/mycommunity-service/` — see `backend/mycommunity-service/CLAUDE.md`
 - `backend/auth-service/` — see `backend/auth-service/CLAUDE.md`
 
 ## This repo is fully standalone — no dependency on raitukashtam (the platform repo)
@@ -65,23 +65,24 @@ docker-compose stack to be running:
   from config-server is now a plain env var (see each service's
   `.env*.example`) or a Vault secret.
 - **auth-service issues and validates its own JWTs directly** — it has no
-  GitHub Packages dependency. `product-service` still validates the JWTs
+  GitHub Packages dependency. `mycommunity-service` still validates the JWTs
   auth-service issues using `jwt-library`, a shared library that lives in
   the platform repo's source and is **published to GitHub Packages** by the
   platform repo's CI whenever the library's source changes on `main`. That
   one build-time dependency is the only remaining link to the platform
   repo — there is no runtime dependency, and no local copy of the library's
-  source lives in this repo; `product-service`'s `pom.xml` declares the
+  source lives in this repo; `mycommunity-service`'s `pom.xml` declares the
   GitHub Packages URL as a `<repository>` and resolves it from there.
 
 **If `jwt-library`'s public API changes** (in the platform repo), its
-`pom.xml` version must be bumped and republished before `product-service`
+`pom.xml` version must be bumped and republished before `mycommunity-service`
 can pick up the change (GitHub Packages rejects republishing an existing
-version) — then the dependency version in `product-service`'s `pom.xml`
+version) — then the dependency version in `mycommunity-service`'s `pom.xml`
 must be updated to match.
 
 **Do not modify the platform repo (`raitukashtam`) as part of work in this
 repo.** Its own copies of `backend/auth-service` and `backend/product-service`
+(the platform repo's own directory names — unrenamed, untouched)
 are known, intentional duplicates — left in place, untouched. This repo is
 the one going to production for these two services; the platform repo's
 copies and its own deploy pipeline are a separate, out-of-scope concern
@@ -89,7 +90,7 @@ unless a user explicitly asks otherwise.
 
 ## Authenticating to GitHub Packages
 
-Currently only `product-service` depends on a platform-repo library
+Currently only `mycommunity-service` depends on a platform-repo library
 (`jwt-library`) and needs a token with `read:packages` scope to resolve it —
 `auth-service` has no such dependency. **`raitukashtam` (the platform repo)
 is private, so packages published from it are private too**
@@ -118,4 +119,7 @@ so business/domain services could be built and deployed independently.
 `auth-service` was added the same way on 2026-08-27, at which point this
 repo also stopped depending on the platform repo's runtime stack entirely
 (see above) — the AWS deployment target is just this repo's own
-auth-service + product-service, not the platform repo's full stack.
+auth-service + mycommunity-service, not the platform repo's full stack.
+`product-service` was renamed to `mycommunity-service` within this repo on
+2026-08-28 (see `PROGRESS.md`) — the platform repo's own copy keeps its
+original `product-service` name, untouched.

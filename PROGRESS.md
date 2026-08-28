@@ -7,15 +7,22 @@ see repo-root `CLAUDE.md`'s "Session Tracking" section for the convention.
 
 ## Status
 
-Standalone dev stack (auth-service + product-service + root-owned
+Standalone dev stack (auth-service + mycommunity-service + root-owned
 Vault/Redis) verified working locally. **Not yet deployed to AWS.**
+`mycommunity-service`'s domain model is still the placeholder carried over
+from the old `product-service` entity — the real community domain (fields,
+endpoints) has not been defined yet.
 
 ## Open items / next steps
 
+- Define the real `mycommunity-service` domain model (entity fields,
+  endpoints) to replace the placeholder `Community` entity (still shaped
+  like the old `Product` entity: name/description/price/user_id) left over
+  from the 2026-08-28 rename.
 - Decide AWS deploy pipeline ownership for this repo: does
   raitukashtam-business get its own ECR + EC2 (or other) deploy workflow,
   or reuse infra some other way? Nothing exists yet — `auth-ci.yml` and
-  `ci.yml` only build/test, they don't deploy.
+  `mycommunity-ci.yml` only build/test, they don't deploy.
 - `product-service-pg` — a stray leftover Postgres container from before
   the original platform-repo split (predates this repo's existence
   effectively), still running locally on this machine, untouched. Confirm
@@ -27,6 +34,60 @@ Vault/Redis) verified working locally. **Not yet deployed to AWS.**
   files only have placeholders.
 
 ## Sessions
+
+### 2026-08-28
+
+- Renamed `backend/product-service` to `backend/mycommunity-service`
+  throughout this repo (this repo only — the platform repo's own
+  `product-service` copy is untouched, per repo-root `CLAUDE.md`).
+  Per user instruction: a mechanical rename now, with the real community
+  domain model to be defined later — the old `Product` entity's shape
+  (name, description, price, user_id) was carried over unchanged as a
+  placeholder, just renamed to `Community`.
+  - `git mv`'d the service directory, its Java package
+    (`com.raitukashtam.product` → `com.raitukashtam.mycommunity`), and the
+    Product-specific class files (`ProductServiceApplication` →
+    `MyCommunityServiceApplication`, `ProductController` →
+    `CommunityController`, `Product` entity → `Community`,
+    `ProductRepository`/`Request`/`Response`/`Service` → `Community*`) —
+    git history preserved on all of them.
+  - Updated `pom.xml` (groupId/artifactId/name), `application.yml`
+    (`spring.application.name`, Vault KV context, datasource URL/username),
+    all four `docker-compose*.yml` files (service/container/volume names,
+    `PRODUCT_DB_PASSWORD` → `MYCOMMUNITY_DB_PASSWORD`), `.env*.example`
+    files, and this service's own `CLAUDE.md`.
+  - REST endpoints moved from `/api/v1/products` to `/api/v1/communities`;
+    DB table `product` → `community`.
+  - Renamed `.github/workflows/ci.yml` → `mycommunity-ci.yml` (matching
+    the `auth-ci.yml` naming convention), updated its path filters and
+    job/step names.
+  - Updated root `CLAUDE.md`, root `docker-compose*.yml` comments, root
+    `.env*.example`, and `infra/vault/vault-init.sh` for the new service
+    name and `MYCOMMUNITY_DB_PASSWORD` var — including the actual local
+    (gitignored) `.env` files for both the repo root and the service
+    directory, so the local dev stack keeps working without further edits.
+  - Verified `mvn compile` and `mvn test-compile` both succeed offline
+    against the renamed package/class structure.
+  - Verified end-to-end in Docker: `docker compose up -d --build` in
+    `backend/mycommunity-service/` built and started `mycommunity-service`
+    + `mycommunity-postgres`. First boot failed (Postgres SCRAM auth error,
+    no password) because Vault still held the secret at the *old* KV path
+    `secret/product-service` — `vault-init` is a one-shot container that
+    had already run (and exited) with the pre-rename script before this
+    session's edit to `infra/vault/vault-init.sh` landed, so the new
+    `secret/mycommunity-service` path was never seeded. Fixed by
+    `docker compose up -d --force-recreate vault-init` from the repo root
+    (re-seeds Vault from the current `.env`), then restarting
+    `mycommunity-service`. After that: health check passes, Hibernate
+    created the `community` table cleanly, `GET /actuator/health` → 200,
+    `POST /api/v1/communities/` → 401 with no JWT (correct — confirms
+    routing/security wiring, not a 404). **Takeaway for next time a KV
+    path/name changes in `vault-init.sh`: `vault-init` must be
+    force-recreated, a plain restart won't re-run it with new env/script.**
+  - Left `backend/auth-service` completely untouched — it has its own,
+    unrelated `Product`/`ProductMembership`/etc. concept (tenant/business-
+    line scoping for roles), a different domain from the marketplace
+    product catalog this rename was about.
 
 ### 2026-08-27
 

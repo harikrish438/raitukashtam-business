@@ -1,0 +1,71 @@
+# TEST environment — mycommunity-service
+# run with (from this directory, backend/mycommunity-service/):
+#   docker compose -f docker-compose.test.yml --env-file .env.test up -d
+# Requires: .env.test file, a GITHUB_TOKEN env var with read:packages scope,
+#   and this repo's own shared-infra test stack already running
+#   (docker compose -f docker-compose.test.yml --env-file .env.test up -d
+#   from the repo root) since this stack joins its Vault/Redis/network —
+#   no dependency on the raitukashtam platform repo.
+networks:
+  raitukashtam-network:
+    external: true
+    name: raitukashtam-network
+
+volumes:
+  mycommunity-pgdata-test:
+
+secrets:
+  github_token:
+    environment: GITHUB_TOKEN
+
+services:
+
+  mycommunity-postgres:
+    image: postgres:15
+    container_name: mycommunity-postgres-test
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mycommunity-service-db
+      POSTGRES_USER: mycommunity-service-user
+      POSTGRES_PASSWORD: ${MYCOMMUNITY_DB_PASSWORD:?MYCOMMUNITY_DB_PASSWORD is required in .env.test}
+      TZ: Asia/Kolkata
+      PGTZ: Asia/Kolkata
+    command: ["postgres", "-c", "timezone=Asia/Kolkata", "-c", "log_timezone=Asia/Kolkata"]
+    volumes:
+      - mycommunity-pgdata-test:/var/lib/postgresql/data
+    networks:
+      - raitukashtam-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mycommunity-service-user -d mycommunity-service-db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  mycommunity-service:
+    build:
+      context: .
+      secrets:
+        - github_token
+    container_name: mycommunity-service-test
+    restart: unless-stopped
+    depends_on:
+      mycommunity-postgres:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: test
+      VAULT_HOST: vault-test
+      VAULT_TOKEN: ${VAULT_TOKEN}
+      SPRING_CLOUD_VAULT_KV_DEFAULT_CONTEXT: mycommunity-service
+      SPRING_DATASOURCE_URL: jdbc:postgresql://mycommunity-postgres:5432/mycommunity-service-db?currentSchema=public&stringtype=unspecified&TimeZone=Asia/Kolkata
+      SPRING_DATASOURCE_USERNAME: mycommunity-service-user
+      AUTH_SERVICE_URL: http://auth-service:8080
+    ports:
+      - "8081:8081"
+    networks:
+      - raitukashtam-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "http://localhost:8081/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
