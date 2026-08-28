@@ -126,6 +126,41 @@ class UserControllerApiTest extends AbstractIntegrationTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     }
 
+    // ---------- GET /users/me (Self-Service) ----------
+
+    @Test
+    void getCurrentUser_noToken_returns401() {
+        assertThat(get("/users/me", null).getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
+    void getCurrentUser_withValidUserToken_returns200() {
+        String email = testDataFactory.uniqueEmail("me-ok");
+        testDataFactory.registerUser(email);
+        String token = new PkceFlowClient(restTemplate)
+                .loginAndGetAccessToken(baseUrl(""), WEB_CLIENT_ID, WEB_REDIRECT_URI, email, TestDataFactory.VALID_PASSWORD);
+
+        ResponseEntity<String> response = get("/users/me", token);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).contains(email);
+    }
+
+    @Test
+    void getCurrentUser_withBackendServiceToken_returns404() {
+        // client_credentials tokens have no Identity behind them -- their
+        // `sub` is the OAuth2 client id, not an Identity UUID -- so /me has
+        // no profile to return, same as an unknown identity.
+        String clientId = "test-backend-me-" + System.nanoTime();
+        String secret = testDataFactory.createBackendServiceClient(clientId);
+        PkceFlowClient.TokenResult token = new PkceFlowClient(restTemplate).clientCredentials(baseUrl(""), clientId, secret);
+        assertThat(token.accessToken()).isNotNull();
+
+        ResponseEntity<String> response = get("/users/me", token.accessToken());
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
     // ---------- GET /users/{id} (Business Service Integration) ----------
 
     @Test

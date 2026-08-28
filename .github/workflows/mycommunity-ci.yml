@@ -16,27 +16,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # jwt-library is published from raitukashtam, which is a PRIVATE repo,
-      # so the artifact is a private package too. This workflow's own
-      # secrets.GITHUB_TOKEN is scoped only to THIS repo and cannot read a
-      # package published under a different, private repository — a classic
-      # PAT with read:packages (owned by an account with access to both
-      # repos) is required instead. Create one at
-      # https://github.com/settings/tokens (classic, read:packages scope)
-      # and add it as a repo secret here named PACKAGES_READ_TOKEN
-      # (Settings > Secrets and variables > Actions).
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "21"
           cache: maven
-          server-id: github
-          server-username: GITHUB_ACTOR
-          server-password: PACKAGES_READ_TOKEN
 
       - name: Build and test mycommunity-service
         run: mvn -B verify
         working-directory: backend/mycommunity-service
-        env:
-          GITHUB_ACTOR: ${{ github.actor }}
-          PACKAGES_READ_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN }}

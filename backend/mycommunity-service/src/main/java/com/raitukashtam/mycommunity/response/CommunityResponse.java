@@ -12,11 +12,12 @@ import java.time.LocalDateTime;
 public class CommunityResponse {
     private Long id;
     private String name;
-    private String description;
-    private Double price;
-    private Double userId;
+    private Integer totalUnits;
+    private String street;
+    private String area;
+    private String district;
+    private String state;
+    private String pincode;
+    private String landmark;
     private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
-    private String modifiedBy;
-    private String createdBy;
 }

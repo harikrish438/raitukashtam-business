@@ -1,10 +1,8 @@
 package com.raitukashtam.mycommunity.entity;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
-import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "community")
@@ -18,12 +16,23 @@ public class Community extends BaseEntity {
     @Column(nullable = false)
     private String name;
 
-    @Column(columnDefinition = "TEXT")
-    private String description;
+    @Column(name = "total_units", nullable = false)
+    private Integer totalUnits;
 
     @Column(nullable = false)
-    private Double price;
+    private String street;
 
-    @Column(name = "user_id", nullable = false)
-    private Long userId;
+    @Column(nullable = false)
+    private String area;
+
+    @Column(nullable = false)
+    private String district;
+
+    @Column(nullable = false)
+    private String state;
+
+    @Column(nullable = false)
+    private String pincode;
+
+    private String landmark;
 }

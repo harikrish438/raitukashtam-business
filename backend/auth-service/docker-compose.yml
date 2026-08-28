@@ -74,6 +74,7 @@ services:
       RECAPTCHA_SITE_KEY: ${RECAPTCHA_SITE_KEY:-}
       WEB_CLIENT_REDIRECT_URI: ${WEB_CLIENT_REDIRECT_URI:-http://localhost:3000/callback}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+      PLATFORM_ADMIN_EMAIL: ${PLATFORM_ADMIN_EMAIL:-}
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8080/}
       JAVA_TOOL_OPTIONS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5008"
     ports:

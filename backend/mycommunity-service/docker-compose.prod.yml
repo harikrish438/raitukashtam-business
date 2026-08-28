@@ -1,11 +1,10 @@
 # PROD environment — mycommunity-service
 # run with (from this directory, backend/mycommunity-service/):
 #   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
-# Requires: .env.prod file, a GITHUB_TOKEN env var with read:packages scope,
-#   and this repo's own shared-infra prod stack already running
-#   (docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
-#   from the repo root) since this stack joins its Vault/Redis/network —
-#   no dependency on the raitukashtam platform repo.
+# Requires: .env.prod file, and this repo's own shared-infra prod stack
+#   already running (docker compose -f docker-compose.prod.yml --env-file
+#   .env.prod up -d from the repo root) since this stack joins its
+#   Vault/Redis/network — no dependency on the raitukashtam platform repo.
 networks:
   raitukashtam-network:
     external: true
@@ -13,10 +12,6 @@ networks:
 
 volumes:
   mycommunity-pgdata-prod:
-
-secrets:
-  github_token:
-    environment: GITHUB_TOKEN
 
 services:
 
@@ -49,8 +44,6 @@ services:
   mycommunity-service:
     build:
       context: .
-      secrets:
-        - github_token
     container_name: mycommunity-service-prod
     restart: always
     depends_on:

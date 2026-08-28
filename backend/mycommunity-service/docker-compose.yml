@@ -1,10 +1,9 @@
 # DEV environment — mycommunity-service
 # run with (from this directory, backend/mycommunity-service/): docker compose up -d
-# Requires: .env file (copy from .env.example), a GITHUB_TOKEN env var with
-#   read:packages scope (to pull jwt-library from GitHub Packages at build
-#   time), and this repo's own shared-infra stack already running
-#   (docker compose up -d from the repo root) since this stack joins its
-#   Vault/Redis/network — no dependency on the raitukashtam platform repo.
+# Requires: .env file (copy from .env.example), and this repo's own
+#   shared-infra stack already running (docker compose up -d from the
+#   repo root) since this stack joins its Vault/Redis/network — no
+#   dependency on the raitukashtam platform repo.
 networks:
   raitukashtam-network:
     external: true
@@ -13,10 +12,6 @@ networks:
 volumes:
   mycommunity-pgdata:
   mycommunity-logs:
-
-secrets:
-  github_token:
-    environment: GITHUB_TOKEN
 
 services:
 
@@ -57,8 +52,6 @@ services:
         max-file: "3"
     build:
       context: .
-      secrets:
-        - github_token
     container_name: mycommunity-service
     restart: unless-stopped
     volumes:

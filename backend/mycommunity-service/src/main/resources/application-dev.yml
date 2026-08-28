@@ -10,6 +10,6 @@ spring:
 logging:
   level:
     org.springframework.web: DEBUG
-    com.raitukashtam.jwt.filter: DEBUG
+    org.springframework.security.oauth2.server.resource: DEBUG
     io.micrometer.tracing: DEBUG
     org.springframework.boot.actuate.tracing: DEBUG

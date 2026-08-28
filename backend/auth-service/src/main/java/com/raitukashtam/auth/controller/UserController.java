@@ -12,9 +12,13 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/users")
@@ -36,6 +40,23 @@ public class UserController {
                 request.getMobileNumber()
         );
         return ResponseEntity.ok("User registered successfully");
+    }
+
+    @GetMapping("/me")
+    @Tag(name = OpenApiConfig.TAG_SELF_SERVICE)
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(summary = "Get the caller's own profile", description = "Requires a Bearer token backed "
+            + "by a real Identity (a user login, not client_credentials). A client_credentials token's "
+            + "subject is the OAuth2 client id, not an Identity UUID, so it 404s the same as an unknown "
+            + "identity -- this endpoint doesn't distinguish the two, both mean \"no profile here\".")
+    public ResponseEntity<UserResponse> getCurrentUser(@AuthenticationPrincipal Jwt jwt) {
+        UUID identityId;
+        try {
+            identityId = UUID.fromString(jwt.getSubject());
+        } catch (IllegalArgumentException e) {
+            throw new UsernameNotFoundException("Invalid or unknown identity");
+        }
+        return ResponseEntity.ok(userService.getCurrentUser(identityId));
     }
 
     @GetMapping("/{id}")

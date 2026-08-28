@@ -22,15 +22,6 @@
         <spring-cloud.version>2023.0.3</spring-cloud.version>
     </properties>
 
-    <!-- jwt-library is published here by the raitukashtam platform repo's CI -->
-    <repositories>
-        <repository>
-            <id>github</id>
-            <name>Raitukashtam GitHub Packages</name>
-            <url>https://maven.pkg.github.com/harikrish438/raitukashtam</url>
-        </repository>
-    </repositories>
-
     <!-- BOM import must be BEFORE dependencies -->
     <dependencyManagement>
         <dependencies>
@@ -64,6 +55,10 @@
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
@@ -88,16 +83,6 @@
         <dependency>
             <groupId>org.hibernate.validator</groupId>
             <artifactId>hibernate-validator</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.modelmapper</groupId>
-            <artifactId>modelmapper</artifactId>
-            <version>3.2.0</version>
-        </dependency>
-        <dependency>
-            <groupId>com.raitukashtam</groupId>
-            <artifactId>jwt-library</artifactId>
-            <version>1.0.0</version>
         </dependency>
         <dependency>
             <groupId>net.logstash.logback</groupId>

@@ -20,7 +20,6 @@ vault kv put secret/auth-service \
   "twofactor.api.key=${TWOFACTOR_API_KEY}"
 
 vault kv put secret/mycommunity-service \
-  "jwt.secret=${JWT_SECRET}" \
   "spring.datasource.password=${MYCOMMUNITY_DB_PASSWORD}"
 
 echo "Vault secrets initialized successfully."

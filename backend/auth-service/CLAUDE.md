@@ -9,22 +9,65 @@ directory convention) — this file only covers what's specific to
 ## Overview (port 8080, debug 5008 in dev)
 - PostgreSQL DB: `auth-service-db` container `auth-postgres` (host port
   5435 via this directory's `docker-compose.yml`)
-- Issues and validates its own JWTs (RSA keypair) — does NOT depend on
-  `jwt-library` (that's consumed by `product-service` to validate tokens
-  this service issues; auth-service itself has no GitHub Packages
-  dependency and needs no `settings.xml`/`PACKAGES_READ_TOKEN`)
+- Issues and validates its own JWTs (RS256, its own JWKS at
+  `/oauth2/jwks`) via Spring Authorization Server. `mycommunity-service`
+  validates the same tokens using Spring's own `oauth2ResourceServer`
+  support pointed at that JWKS endpoint — no shared library or secret
+  (`jwt-library` was removed from this repo entirely, 2026-08-28; neither
+  service has a GitHub Packages dependency any more)
 - Redis: rate-limiting (`RateLimiterService`) and OTP storage
   (`OTPService`) — a real functional dependency, not just a session store
 - Secrets (JWT signing keypair, DB password, Redis password, mail
   password, reCAPTCHA secret, 2Factor API key) come from Vault under KV
   path `secret/auth-service`, seeded by the repo root's `vault-init.sh`
 - No Eureka, no config-server — both were dropped when this service moved
-  here (see repo-root `CLAUDE.md`); `product-service` reaches this service
-  by its plain Docker Compose hostname (`http://auth-service:8080`)
+  here (see repo-root `CLAUDE.md`); `mycommunity-service` reaches this
+  service by its plain Docker Compose hostname (`http://auth-service:8080`)
 
 Key env-var-driven config (see `.env.example`): `AUTH_DB_PASSWORD`,
 `REDIS_PASSWORD`, `MAIL_USERNAME`, `GOOGLE_CLIENT_ID`, `RECAPTCHA_SITE_KEY`,
-`WEB_CLIENT_REDIRECT_URI`, `CORS_ALLOWED_ORIGINS`, `APP_BASE_URL`.
+`WEB_CLIENT_REDIRECT_URI`, `CORS_ALLOWED_ORIGINS`, `APP_BASE_URL`,
+`PLATFORM_ADMIN_EMAIL`.
+
+## Products, roles, and clients — onboarding is a data operation, not a code change
+
+auth-service is multi-tenant at the "product" level: a `Product` is a
+business-line-level tenant (e.g. `RAITUKASHTAM`, `MYCOMMUNITY`), each with
+its own `Role`s and OAuth2 `Client`s (`Client.product`). Registering a new
+product for a new app **does not need a migration, a `CommandLineRunner`
+seeder, or any other code change** — `ProductController`/`RoleController`/
+`ClientController` already expose exactly this as a `PLATFORM_ADMIN`-gated
+REST API. `MYCOMMUNITY` itself was onboarded this way (2026-08-28) — a
+first attempt used a bespoke migration + seeder class before realizing
+that was unnecessary once a platform admin already exists (see
+repo-root `PROGRESS.md` for the full story, including a latent bug this
+surfaced: role lookups are scoped by *the calling OAuth2 client's own
+product*, not any hardcoded default, which self-service signup flows must
+respect once more than one product exists).
+
+**One-time per environment — bootstrap the first `PLATFORM_ADMIN`** (skip
+if one already exists): set `PLATFORM_ADMIN_EMAIL` in `.env`, register
+that email via the public `POST /users/register`, then restart this
+service once — `PlatformAdminSeeder` promotes it on that boot. This step
+alone still needs a restart (a fresh environment has no admin token yet
+to call anything with) — that's the one genuine chicken-and-egg case
+here, not something an API can route around.
+
+**Onboarding a product (repeat any time, no restart, no deploy):**
+1. Log in as the platform admin through the normal Authorization Code +
+   PKCE flow (`GET /oauth2/authorize` → `/login` → `POST /oauth2/token`)
+   to get a Bearer token — same flow the mobile/web clients use.
+2. `POST /products` `{"code":"NEWPRODUCT","name":"New Product"}`
+3. `POST /products/NEWPRODUCT/roles` `{"code":"CONSUMER","name":"Consumer"}`
+   (required — `RoleService.assignDefaultRole` needs this before any
+   signup/login flow can provision a membership into the product) and any
+   other roles the product needs (e.g. `ADMIN`).
+4. `POST /products/NEWPRODUCT/clients`
+   `{"clientId":"newproduct-android","clientType":"ANDROID","redirectUris":["newproduct://callback"]}`
+   for each OAuth2 client the new app needs.
+
+All three endpoints are documented under the "Platform Admin" tag in the
+running service's OpenAPI/Swagger UI (`/swagger-ui.html`).
 
 ## Files in this directory
 ```

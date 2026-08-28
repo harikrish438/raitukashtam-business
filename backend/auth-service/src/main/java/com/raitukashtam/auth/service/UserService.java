@@ -139,6 +139,17 @@ public class UserService {
                 .orElseThrow(() -> new UsernameNotFoundException("Invalid or unknown identity"));
     }
 
+    /**
+     * Resolves the caller's own profile from the Identity UUID a resource-server
+     * JWT carries as its subject. Throws the same UsernameNotFoundException as
+     * findByIdentityId (-> 404) for a client_credentials token, which has no
+     * Identity behind it.
+     */
+    @Transactional(readOnly = true)
+    public UserResponse getCurrentUser(UUID identityId) {
+        return toUserResponse(findByIdentityId(identityId));
+    }
+
     @Transactional
     public void updatePassword(Long userId, String newPassword) {
         User user = userRepository.findById(userId)

@@ -87,6 +87,7 @@ raitukashtam:
   default-product-name: Raitukashtam
   web-client:
     redirect-uri: http://localhost:3000/callback
+  mycommunity-product-code: MYCOMMUNITY
   cors:
     allowed-origins: http://localhost:3000
   platform-admin:

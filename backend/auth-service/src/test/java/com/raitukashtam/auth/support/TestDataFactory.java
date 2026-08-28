@@ -4,10 +4,13 @@ import com.raitukashtam.auth.entity.Client;
 import com.raitukashtam.auth.entity.ClientType;
 import com.raitukashtam.auth.entity.Identity;
 import com.raitukashtam.auth.entity.Product;
+import com.raitukashtam.auth.entity.ProductStatus;
+import com.raitukashtam.auth.entity.Role;
 import com.raitukashtam.auth.entity.User;
 import com.raitukashtam.auth.repository.ClientRepository;
 import com.raitukashtam.auth.repository.IdentityRepository;
 import com.raitukashtam.auth.repository.ProductRepository;
+import com.raitukashtam.auth.repository.RoleRepository;
 import com.raitukashtam.auth.repository.UserRepository;
 import com.raitukashtam.auth.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -47,10 +50,15 @@ public class TestDataFactory {
     @Autowired
     private ClientRepository clientRepository;
     @Autowired
+    private RoleRepository roleRepository;
+    @Autowired
     private PasswordEncoder passwordEncoder;
 
     @Value("${raitukashtam.default-product-code}")
     private String defaultProductCode;
+
+    @Value("${raitukashtam.mycommunity-product-code}")
+    private String myCommunityProductCode;
 
     /** A 10-digit mobile number guaranteed unique within this test JVM run. */
     public String uniqueMobile() {
@@ -108,5 +116,37 @@ public class TestDataFactory {
         clientRepository.save(client);
 
         return plaintextSecret;
+    }
+
+    /**
+     * Test-only fixture: MyCommunity is deliberately NOT auto-seeded by any
+     * migration or CommandLineRunner in application code any more (see
+     * auth-service's PROGRESS.md, 2026-08-28) -- onboarding a product is a
+     * PLATFORM_ADMIN API operation (POST /products, /products/{code}/roles,
+     * /products/{code}/clients), not a code change. Tests still need it to
+     * exist though, so this recreates just enough of it directly via
+     * repositories -- the same kind of test-only shortcut
+     * registerAndPromoteToPlatformAdmin already takes above, not a
+     * production code path. Idempotent: safe to call from every test that
+     * needs it.
+     */
+    @Transactional
+    public void ensureMyCommunityProduct() {
+        Product product = productRepository.findByCode(myCommunityProductCode)
+                .orElseGet(() -> {
+                    Product p = new Product();
+                    p.setCode(myCommunityProductCode);
+                    p.setName("MyCommunity");
+                    p.setStatus(ProductStatus.ACTIVE);
+                    return productRepository.save(p);
+                });
+
+        if (roleRepository.findByProduct_CodeAndCode(myCommunityProductCode, "CONSUMER").isEmpty()) {
+            Role role = new Role();
+            role.setProduct(product);
+            role.setCode("CONSUMER");
+            role.setName("Consumer");
+            roleRepository.save(role);
+        }
     }
 }

@@ -41,12 +41,11 @@ spring:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         jdbc:
           time_zone: Asia/Kolkata
-
-jwt:
-  secret: ${JWT_SECRET:your-secret-key-change-this-in-production}
-  issuer: raitukashtam
-  access-expiration: 3600000
-  refresh-expiration: 604800000
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${AUTH_SERVICE_URL:http://localhost:8080}/oauth2/jwks
 
 auth:
   service:

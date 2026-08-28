@@ -1,51 +1,33 @@
 package com.raitukashtam.mycommunity.config;
 
-import com.raitukashtam.jwt.JwtTokenUtil;
-import com.raitukashtam.jwt.filter.JwtAuthenticationFilter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import jakarta.servlet.http.HttpServletResponse;
 
-import java.util.Arrays;
-
+/**
+ * Validates JWTs the same way auth-service's own resource-server chain
+ * does: Spring's oauth2ResourceServer support against auth-service's live
+ * JWKS endpoint (RS256, keypair-based) -- no shared secret, no library.
+ * jwt-library (HMAC256 + a shared jwt.secret) was removed 2026-08-28:
+ * auth-service moved to Spring Authorization Server (RS256/JWKS) and
+ * jwt-library was never updated to match, so it could never actually have
+ * validated a real auth-service-issued token.
+ */
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
 
     private static final Logger logger = LoggerFactory.getLogger(SecurityConfig.class);
 
-    @Value("${jwt.secret}")
-    private String secret;
-
-    @Value("${jwt.issuer}")
-    private String issuer;
-
-    @Value("${jwt.access-expiration}")
-    private long accessExpiration;
-
-    @Value("${jwt.refresh-expiration}")
-    private long refreshExpiration;
-
     @Bean
-    public JwtTokenUtil jwtTokenUtil() {
-        return new JwtTokenUtil(secret, issuer, accessExpiration, refreshExpiration);
-    }
-
-    @Bean
-    public JwtAuthenticationFilter jwtAuthenticationFilter(JwtTokenUtil jwtTokenUtil) {
-        return new JwtAuthenticationFilter(jwtTokenUtil, Arrays.asList("/actuator", "/health"));
-    }
-
-    @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtAuthenticationFilter jwtAuthenticationFilter) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         logger.info("Configuring SecurityFilterChain");
         http
             .csrf(csrf -> csrf.disable())
@@ -54,7 +36,7 @@ public class SecurityConfig {
                 .requestMatchers("/actuator/**", "/health", "/error").permitAll()
                 .anyRequest().authenticated()
             )
-            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+            .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
             .exceptionHandling(exception -> exception
                 .authenticationEntryPoint((request, response, authException) -> {
                     logger.error("Authentication failed: {} for path: {}", authException.getMessage(), request.getRequestURI());

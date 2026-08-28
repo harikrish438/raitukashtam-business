@@ -64,21 +64,17 @@ docker-compose stack to be running:
   Eureka-based service discovery, and every config value that used to come
   from config-server is now a plain env var (see each service's
   `.env*.example`) or a Vault secret.
-- **auth-service issues and validates its own JWTs directly** — it has no
-  GitHub Packages dependency. `mycommunity-service` still validates the JWTs
-  auth-service issues using `jwt-library`, a shared library that lives in
-  the platform repo's source and is **published to GitHub Packages** by the
-  platform repo's CI whenever the library's source changes on `main`. That
-  one build-time dependency is the only remaining link to the platform
-  repo — there is no runtime dependency, and no local copy of the library's
-  source lives in this repo; `mycommunity-service`'s `pom.xml` declares the
-  GitHub Packages URL as a `<repository>` and resolves it from there.
-
-**If `jwt-library`'s public API changes** (in the platform repo), its
-`pom.xml` version must be bumped and republished before `mycommunity-service`
-can pick up the change (GitHub Packages rejects republishing an existing
-version) — then the dependency version in `mycommunity-service`'s `pom.xml`
-must be updated to match.
+- **auth-service issues and validates its own JWTs directly** (Spring
+  Authorization Server, RS256, its own JWKS at `/oauth2/jwks`).
+  `mycommunity-service` validates those same JWTs using Spring's own
+  `oauth2ResourceServer` support, fetching auth-service's JWKS live over
+  the network at runtime — no shared secret, no library. **This repo has
+  no build-time or runtime dependency on the platform repo at all** —
+  `jwt-library` (the one remaining link) was removed 2026-08-28 (see
+  `backend/mycommunity-service/CLAUDE.md`'s History section for why: it
+  signed/validated with HMAC256 against a shared secret, but auth-service
+  had since moved to RS256/JWKS, so it could never actually have validated
+  a real auth-service-issued token).
 
 **Do not modify the platform repo (`raitukashtam`) as part of work in this
 repo.** Its own copies of `backend/auth-service` and `backend/product-service`
@@ -87,30 +83,6 @@ are known, intentional duplicates — left in place, untouched. This repo is
 the one going to production for these two services; the platform repo's
 copies and its own deploy pipeline are a separate, out-of-scope concern
 unless a user explicitly asks otherwise.
-
-## Authenticating to GitHub Packages
-
-Currently only `mycommunity-service` depends on a platform-repo library
-(`jwt-library`) and needs a token with `read:packages` scope to resolve it —
-`auth-service` has no such dependency. **`raitukashtam` (the platform repo)
-is private, so packages published from it are private too**
-— a repo's own auto-generated `secrets.GITHUB_TOKEN` is scoped only to that
-repo and CANNOT read packages published under a different, private
-repository (confirmed by a failed CI run, 2026-08-16: "Could not find
-artifact com.raitukashtam:jwt-library:jar:1.0.0 in github", even though the
-artifact had just been uploaded successfully). A real PAT is required
-everywhere, for every service:
-- **CI** (`.github/workflows/<service>-ci.yml` or similar): needs a classic
-  PAT with `read:packages`, added as a repo secret named
-  `PACKAGES_READ_TOKEN` (Settings > Secrets and variables > Actions > New
-  repository secret). Create the PAT at https://github.com/settings/tokens.
-- **Local `docker compose build`**: set `GITHUB_TOKEN` in that service's own
-  `.env` (see its `.env.example`) to a classic PAT with `read:packages`.
-  Dockerfiles consume it via a BuildKit secret mount
-  (`--mount=type=secret`), so it never lands in an image layer.
-- **Local `mvn` runs outside Docker**: add a `<server>` entry for id
-  `github` with the same PAT to your own `~/.m2/settings.xml` (do not commit
-  a personal settings.xml to this repo).
 
 ## History
 
@@ -122,4 +94,7 @@ repo also stopped depending on the platform repo's runtime stack entirely
 auth-service + mycommunity-service, not the platform repo's full stack.
 `product-service` was renamed to `mycommunity-service` within this repo on
 2026-08-28 (see `PROGRESS.md`) — the platform repo's own copy keeps its
-original `product-service` name, untouched.
+original `product-service` name, untouched. Later the same day,
+`jwt-library` was removed from `mycommunity-service` (see above) — this
+repo has had no dependency on the platform repo whatsoever, build-time or
+runtime, since then.
