@@ -35,9 +35,10 @@ convention) — this file only covers what's specific to `mycommunity-service`.
   (`update` in dev, `validate` in test/prod already). `V1` is a baseline
   generated from `pg_dump` against the live dev schema at the time; `V2`
   renamed `CommunityRole.OWNER` to `RESIDENT` and added the
-  `community_join_request` table. See auth-service's own Flyway
-  convention (`baseline-on-migrate`/`baseline-version` in
-  `application.yml`) — this service now follows the same pattern.
+  `community_join_request` table; `V3` added the `announcement` table
+  (Phase 2). See auth-service's own Flyway convention
+  (`baseline-on-migrate`/`baseline-version` in `application.yml`) — this
+  service now follows the same pattern.
 
 ## Domain model (Phase 1, extended 2026-08-31 — registration, roles, join requests)
 
@@ -57,6 +58,13 @@ convention) — this file only covers what's specific to `mycommunity-service`.
   (partial unique index) — a past `REJECTED` request doesn't block asking
   again. This is the "I wasn't invited" path, surfaced when `POST
   /communities` 409s on a duplicate community.
+- **Announcement** (Phase 2, new 2026-08-31): community (FK), title,
+  body (text), postedBy (FK → `CommunityMember`, not a raw identity id,
+  so a display name is available in the response without another
+  auth-service call). ADMIN-only to create/delete; any ACTIVE member can
+  read. Pure data+API — no push notification delivery (deliberately
+  deferred to a later phase; see repo-root `PROGRESS.md`'s 2026-08-31
+  session entry (5) for why).
 
 Endpoints (`/api/v1/communities`, all require a Bearer JWT):
 
@@ -74,13 +82,20 @@ Endpoints (`/api/v1/communities`, all require a Bearer JWT):
 | GET | `/api/v1/communities/{id}/join-requests` | Caller must be an ACTIVE ADMIN; lists PENDING requests |
 | POST | `/api/v1/communities/{id}/join-requests/{reqId}/approve` | Caller must be an ACTIVE ADMIN; creates an ACTIVE RESIDENT member |
 | POST | `/api/v1/communities/{id}/join-requests/{reqId}/reject` | Caller must be an ACTIVE ADMIN |
+| POST | `/api/v1/communities/{id}/announcements` | Caller must be an ACTIVE ADMIN |
+| GET | `/api/v1/communities/{id}/announcements` | Caller must be an ACTIVE member; newest first |
+| GET | `/api/v1/communities/{id}/announcements/{announcementId}` | Caller must be an ACTIVE member |
+| DELETE | `/api/v1/communities/{id}/announcements/{announcementId}` | Caller must be an ACTIVE ADMIN |
 
-Later phases (dashboard aggregation, bills/payments, expenses, visitors,
-announcements, amenities) are designed but not yet built — see
-`~/.claude/plans/validated-rolling-pizza.md` in the session this was
-planned in, or ask for the full data model if that file isn't available.
-Expenses is explicitly ADMIN-only per the user's spec, not yet designed
-in detail.
+A 13-phase roadmap for the remaining feature areas (bills/payments,
+expenses, dashboard aggregation, visitors, amenities, helpdesk,
+staff/vendor, documents, structured units, committee/RWA, push
+notification delivery) was agreed with the user — see repo-root
+`PROGRESS.md`'s 2026-08-31 session entry (5). The original full data
+model sketch for these is in `~/.claude/plans/validated-rolling-pizza.md`
+(from the session Phase 1 was planned in) or ask for it if that file
+isn't available. Expenses is explicitly ADMIN-only per the user's spec,
+not yet designed in detail.
 
 ## Known gaps (not this service's to fix, but block real end-to-end use)
 

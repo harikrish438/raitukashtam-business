@@ -38,6 +38,9 @@ a "list my communities"/"activate my invitations" pair for the mobile
 app's post-login branch, and a full join-request flow for someone who
 wasn't invited — see the 2026-08-31 session entry. This service also
 gained its first Flyway migrations (previously Hibernate `ddl-auto` only).
+`mycommunity-service` now also has **Phase 2 (Announcements)**: ADMIN
+posts, any ACTIVE member reads — pure data+API, no push notifications
+(deliberately deferred, see the 2026-08-31 session entry (5)).
 auth-service also gained a self-service `PATCH /users/me` (firstName/
 lastName/email, partial update) — the account-level counterpart to
 mycommunity-service's own member-profile update, closing a gap surfaced
@@ -51,9 +54,19 @@ the 2026-08-31 session entry (4).
 
 ## Open items / next steps
 
-- Build the remaining `mycommunity-service` phases (dashboard aggregation,
-  bills/payments, expenses, visitors, announcements, amenities) — full
-  data model already designed, see the 2026-08-28 session entry below.
+- Build the remaining `mycommunity-service` phases (bills/payments,
+  expenses, dashboard aggregation, visitors, amenities, then push-
+  notification delivery once the mobile app has real networking — see the
+  full phased roadmap agreed with the user in the 2026-08-31 session
+  entry (5)). Announcements (Phase 2) is now done. Full data model for
+  the rest already designed, see the 2026-08-28 session entry below.
+- **Push notification delivery is explicitly out of scope for now** —
+  discussed with the user when scoping Announcements: needs FCM
+  integration, a device-token registration endpoint, and (blocking)
+  networking code in the mobile app, which doesn't exist yet. Deferred to
+  its own later phase rather than bolted onto any single feature, since
+  every future feature (bills due, visitor arrived, join-request
+  approved) would want it too.
 - **Mobile app has no networking/PKCE client code at all** (confirmed by
   reading every screen — `OtpActivity.verifyOtp()` is just a `TODO` that
   navigates straight to the dashboard). The backend side is now ready
@@ -110,6 +123,62 @@ the 2026-08-31 session entry (4).
   accepted v1 limitation in the implementation plan, not solved.
 
 ## Sessions
+
+### 2026-08-31 (5)
+
+- **Scoped and built `mycommunity-service` Phase 2: Announcements.**
+  Prompted by the user asking for a phased plan across the full
+  Mygate-style community-management feature set (society management,
+  billing, visitors, helpdesk, communication, amenities, staff/vendor,
+  documents, committee/RWA) — proposed a 13-phase roadmap prioritized by
+  what the `mysociety` app's existing screens/quick-access cards actually
+  need next, grounded in the prior validated plan
+  (`~/.claude/plans/validated-rolling-pizza.md`) and this service's
+  already-live Phase 1. User picked Phase 2 (Announcements) to start.
+  - User then asked whether announcements could push a notification to
+    residents' phones. Answered directly: no infrastructure for this
+    exists anywhere in the repo (confirmed by grep) and the mobile app
+    itself has no networking code yet to receive one — recommended
+    building Announcements as pure data+API now and treating push
+    delivery as its own later phase (cross-cutting, not specific to this
+    feature). User agreed.
+  - Built following the exact pattern of the existing Community/
+    CommunityMember/CommunityJoinRequest trio: `Announcement` entity
+    (title, body, `community` FK, `postedBy` → `CommunityMember` FK, not
+    a raw identity id, so a display name is available without another
+    auth-service call), `AnnouncementRepository`, `AnnouncementRequest`/
+    `AnnouncementResponse`, `AnnouncementService` (delegates membership
+    auth to `CommunityService.requireActiveMember`/`requireActiveAdmin`,
+    same pattern `CommunityJoinRequestService` already uses), four new
+    endpoints on the existing `CommunityController` under
+    `/api/v1/communities/{id}/announcements` (`POST`/`GET` list/`GET` one
+    /`DELETE`, all ADMIN-only except the two `GET`s), and
+    `V3__announcement.sql`.
+  - 7 new unit tests (`AnnouncementServiceTest`, mocked repos + a real
+    `CommunityService` underneath, mirroring `CommunityJoinRequestServiceTest`'s
+    own pattern) — all pass. Full suite: 28/28 except the pre-existing
+    `MyCommunityServiceApplicationTests.contextLoads` (needs a live
+    Postgres on `localhost:5433`, fails identically on unmodified `main`
+    — confirmed via `git stash`, not a regression).
+  - **Live-verified end-to-end** against the rebuilt dev container: `V3`
+    applied (`flyway_schema_history` confirms). Obtained two real RS256
+    JWTs by registering two brand-new `raitukashtam-web` accounts and
+    driving the actual Authorization Code + PKCE flow with a throwaway
+    scratchpad Python script (cookie-jar based, same sequence
+    `PkceFlowClient` uses in auth-service's own tests) — no
+    password-guessing or token-minting shortcut. First identity created a
+    real community (id 2, "Phase2 Test Apartments") and became its ADMIN;
+    second identity was invited as a member then linked via the existing
+    `activate-invitations` endpoint, becoming an ACTIVE RESIDENT.
+    Confirmed: ADMIN create → 201 with correct `postedByName` resolved;
+    `GET` list/by-id → 200 for both ADMIN and RESIDENT; no token → 401;
+    blank title → 400; nonexistent id → 404; RESIDENT attempting
+    create/delete → 403 ("Admin role required for this operation"),
+    verified the announcement was untouched afterward; ADMIN delete →
+    204, confirmed gone from the list. Test community (id 2) and its two
+    members left in the dev DB afterward (same precedent as the existing
+    "Smoke Tester" community #1 from an earlier session) — harmless,
+    not cleaned up.
 
 ### 2026-08-31 (4)
 

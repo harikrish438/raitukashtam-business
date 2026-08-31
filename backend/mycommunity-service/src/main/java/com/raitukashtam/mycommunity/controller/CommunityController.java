@@ -1,13 +1,16 @@
 package com.raitukashtam.mycommunity.controller;
 
+import com.raitukashtam.mycommunity.request.AnnouncementRequest;
 import com.raitukashtam.mycommunity.request.CommunityMemberRequest;
 import com.raitukashtam.mycommunity.request.CommunityRequest;
 import com.raitukashtam.mycommunity.request.JoinRequestRequest;
 import com.raitukashtam.mycommunity.request.MemberProfileUpdateRequest;
+import com.raitukashtam.mycommunity.response.AnnouncementResponse;
 import com.raitukashtam.mycommunity.response.CommunityMemberResponse;
 import com.raitukashtam.mycommunity.response.CommunityResponse;
 import com.raitukashtam.mycommunity.response.JoinRequestResponse;
 import com.raitukashtam.mycommunity.response.MyCommunityResponse;
+import com.raitukashtam.mycommunity.service.AnnouncementService;
 import com.raitukashtam.mycommunity.service.CommunityJoinRequestService;
 import com.raitukashtam.mycommunity.service.CommunityService;
 import lombok.extern.slf4j.Slf4j;
@@ -30,6 +33,9 @@ public class CommunityController {
 
     @Autowired
     private CommunityJoinRequestService joinRequestService;
+
+    @Autowired
+    private AnnouncementService announcementService;
 
     @PostMapping
     public ResponseEntity<CommunityResponse> createCommunity(@RequestBody @Validated CommunityRequest request,
@@ -120,6 +126,39 @@ public class CommunityController {
                                                     @AuthenticationPrincipal Jwt jwt) {
         log.info("Inside rejectJoinRequest method of CommunityController");
         joinRequestService.rejectJoinRequest(communityId, requestId, jwt.getSubject());
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{communityId}/announcements")
+    public ResponseEntity<AnnouncementResponse> createAnnouncement(@PathVariable("communityId") Long communityId,
+                                                                      @RequestBody @Validated AnnouncementRequest request,
+                                                                      @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside createAnnouncement method of CommunityController");
+        return new ResponseEntity<>(
+                announcementService.createAnnouncement(communityId, request, jwt.getSubject()), HttpStatus.CREATED);
+    }
+
+    @GetMapping("/{communityId}/announcements")
+    public List<AnnouncementResponse> listAnnouncements(@PathVariable("communityId") Long communityId,
+                                                          @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside listAnnouncements method of CommunityController");
+        return announcementService.listAnnouncements(communityId, jwt.getSubject());
+    }
+
+    @GetMapping("/{communityId}/announcements/{announcementId}")
+    public AnnouncementResponse getAnnouncement(@PathVariable("communityId") Long communityId,
+                                                 @PathVariable("announcementId") Long announcementId,
+                                                 @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside getAnnouncement method of CommunityController");
+        return announcementService.getAnnouncement(communityId, announcementId, jwt.getSubject());
+    }
+
+    @DeleteMapping("/{communityId}/announcements/{announcementId}")
+    public ResponseEntity<Void> deleteAnnouncement(@PathVariable("communityId") Long communityId,
+                                                    @PathVariable("announcementId") Long announcementId,
+                                                    @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside deleteAnnouncement method of CommunityController");
+        announcementService.deleteAnnouncement(communityId, announcementId, jwt.getSubject());
         return ResponseEntity.noContent().build();
     }
 }
