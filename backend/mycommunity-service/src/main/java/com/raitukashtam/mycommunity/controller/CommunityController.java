@@ -1,5 +1,7 @@
 package com.raitukashtam.mycommunity.controller;
 
+import com.raitukashtam.mycommunity.request.AmenityBookingRequest;
+import com.raitukashtam.mycommunity.request.AmenityRequest;
 import com.raitukashtam.mycommunity.request.AnnouncementRequest;
 import com.raitukashtam.mycommunity.request.CommunityMemberRequest;
 import com.raitukashtam.mycommunity.request.CommunityRequest;
@@ -9,6 +11,8 @@ import com.raitukashtam.mycommunity.request.GenerateBillsRequest;
 import com.raitukashtam.mycommunity.request.JoinRequestRequest;
 import com.raitukashtam.mycommunity.request.MemberProfileUpdateRequest;
 import com.raitukashtam.mycommunity.request.RecordPaymentRequest;
+import com.raitukashtam.mycommunity.response.AmenityBookingResponse;
+import com.raitukashtam.mycommunity.response.AmenityResponse;
 import com.raitukashtam.mycommunity.response.AnnouncementResponse;
 import com.raitukashtam.mycommunity.response.BillResponse;
 import com.raitukashtam.mycommunity.response.CommunityMemberResponse;
@@ -19,6 +23,8 @@ import com.raitukashtam.mycommunity.response.JoinRequestResponse;
 import com.raitukashtam.mycommunity.response.MyCommunityResponse;
 import com.raitukashtam.mycommunity.response.PaymentResponse;
 import com.raitukashtam.mycommunity.response.VisitorResponse;
+import com.raitukashtam.mycommunity.service.AmenityBookingService;
+import com.raitukashtam.mycommunity.service.AmenityService;
 import com.raitukashtam.mycommunity.service.AnnouncementService;
 import com.raitukashtam.mycommunity.service.BillService;
 import com.raitukashtam.mycommunity.service.CommunityJoinRequestService;
@@ -65,6 +71,12 @@ public class CommunityController {
 
     @Autowired
     private VisitorService visitorService;
+
+    @Autowired
+    private AmenityService amenityService;
+
+    @Autowired
+    private AmenityBookingService amenityBookingService;
 
     @PostMapping
     public ResponseEntity<CommunityResponse> createCommunity(@RequestBody @Validated CommunityRequest request,
@@ -336,5 +348,92 @@ public class CommunityController {
                                      @AuthenticationPrincipal Jwt jwt) {
         log.info("Inside checkOut method of CommunityController");
         return visitorService.checkOut(communityId, visitorId, jwt.getSubject());
+    }
+
+    @PostMapping("/{communityId}/amenities")
+    public ResponseEntity<AmenityResponse> createAmenity(@PathVariable("communityId") Long communityId,
+                                                           @RequestBody @Validated AmenityRequest request,
+                                                           @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside createAmenity method of CommunityController");
+        return new ResponseEntity<>(amenityService.createAmenity(communityId, request, jwt.getSubject()), HttpStatus.CREATED);
+    }
+
+    @GetMapping("/{communityId}/amenities")
+    public List<AmenityResponse> listAmenities(@PathVariable("communityId") Long communityId,
+                                                @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside listAmenities method of CommunityController");
+        return amenityService.listAmenities(communityId, jwt.getSubject());
+    }
+
+    @GetMapping("/{communityId}/amenities/{amenityId}")
+    public AmenityResponse getAmenity(@PathVariable("communityId") Long communityId,
+                                       @PathVariable("amenityId") Long amenityId,
+                                       @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside getAmenity method of CommunityController");
+        return amenityService.getAmenity(communityId, amenityId, jwt.getSubject());
+    }
+
+    @PatchMapping("/{communityId}/amenities/{amenityId}/deactivate")
+    public AmenityResponse deactivateAmenity(@PathVariable("communityId") Long communityId,
+                                              @PathVariable("amenityId") Long amenityId,
+                                              @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside deactivateAmenity method of CommunityController");
+        return amenityService.deactivateAmenity(communityId, amenityId, jwt.getSubject());
+    }
+
+    @PostMapping("/{communityId}/amenities/{amenityId}/bookings")
+    public ResponseEntity<AmenityBookingResponse> createBooking(@PathVariable("communityId") Long communityId,
+                                                                  @PathVariable("amenityId") Long amenityId,
+                                                                  @RequestBody @Validated AmenityBookingRequest request,
+                                                                  @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside createBooking method of CommunityController");
+        return new ResponseEntity<>(
+                amenityBookingService.createBooking(communityId, amenityId, request, jwt.getSubject()), HttpStatus.CREATED);
+    }
+
+    @GetMapping("/{communityId}/amenity-bookings")
+    public List<AmenityBookingResponse> listBookings(@PathVariable("communityId") Long communityId,
+                                                       @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside listBookings method of CommunityController");
+        return amenityBookingService.listBookings(communityId, jwt.getSubject());
+    }
+
+    @GetMapping("/{communityId}/amenity-bookings/mine")
+    public List<AmenityBookingResponse> listMyBookings(@PathVariable("communityId") Long communityId,
+                                                         @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside listMyBookings method of CommunityController");
+        return amenityBookingService.listMyBookings(communityId, jwt.getSubject());
+    }
+
+    @GetMapping("/{communityId}/amenity-bookings/{bookingId}")
+    public AmenityBookingResponse getBooking(@PathVariable("communityId") Long communityId,
+                                              @PathVariable("bookingId") Long bookingId,
+                                              @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside getBooking method of CommunityController");
+        return amenityBookingService.getBooking(communityId, bookingId, jwt.getSubject());
+    }
+
+    @PostMapping("/{communityId}/amenity-bookings/{bookingId}/approve")
+    public AmenityBookingResponse approveBooking(@PathVariable("communityId") Long communityId,
+                                                  @PathVariable("bookingId") Long bookingId,
+                                                  @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside approveBooking method of CommunityController");
+        return amenityBookingService.approveBooking(communityId, bookingId, jwt.getSubject());
+    }
+
+    @PostMapping("/{communityId}/amenity-bookings/{bookingId}/reject")
+    public AmenityBookingResponse rejectBooking(@PathVariable("communityId") Long communityId,
+                                                 @PathVariable("bookingId") Long bookingId,
+                                                 @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside rejectBooking method of CommunityController");
+        return amenityBookingService.rejectBooking(communityId, bookingId, jwt.getSubject());
+    }
+
+    @PostMapping("/{communityId}/amenity-bookings/{bookingId}/cancel")
+    public AmenityBookingResponse cancelBooking(@PathVariable("communityId") Long communityId,
+                                                 @PathVariable("bookingId") Long bookingId,
+                                                 @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside cancelBooking method of CommunityController");
+        return amenityBookingService.cancelBooking(communityId, bookingId, jwt.getSubject());
     }
 }

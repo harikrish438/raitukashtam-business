@@ -59,7 +59,11 @@ merged/sorted Payment+Announcement activity feed — see the 2026-08-31
 session entry (9). And **Phase 7 (Visitors)**: any ACTIVE member logs/
 checks-in/checks-out their own visitors as host (pre-approval or
 walk-in), ADMIN sees/acts on all (standing in for a gate-guard role this
-system doesn't have) — see the 2026-08-31 session entry (10).
+system doesn't have) — see the 2026-08-31 session entry (10). And
+**Phase 8 (Amenities)**: ADMIN manages Amenity master data (soft-
+deactivate, no hard delete), any ACTIVE member books one for themselves
+(PENDING → ADMIN approves/rejects, mirrors the join-request lifecycle),
+booker or ADMIN cancels — see the 2026-08-31 session entry (11).
 auth-service also gained a self-service `PATCH /users/me` (firstName/
 lastName/email, partial update) — the account-level counterpart to
 mycommunity-service's own member-profile update, closing a gap surfaced
@@ -73,15 +77,15 @@ the 2026-08-31 session entry (4).
 
 ## Open items / next steps
 
-- Build the remaining `mycommunity-service` phases (amenities, helpdesk,
+- Build the remaining `mycommunity-service` phases (helpdesk,
   staff/vendor, documents, structured units, committee/RWA, then
   push-notification delivery once the mobile app has real networking —
   see the full phased roadmap agreed with the user in the 2026-08-31
   session entry (5)). Announcements (Phase 2), Maintenance & Billing
   generation+status (Phase 3), Payments (Phase 4), Expenses (Phase 5),
-  Dashboard aggregation (Phase 6), and Visitors (Phase 7) are now done.
-  Full data model for the rest already designed, see the 2026-08-28
-  session entry below.
+  Dashboard aggregation (Phase 6), Visitors (Phase 7), and Amenities
+  (Phase 8) are now done. Full data model for the rest already designed,
+  see the 2026-08-28 session entry below.
 - **Push notification delivery is explicitly out of scope for now** —
   discussed with the user when scoping Announcements: needs FCM
   integration, a device-token registration endpoint, and (blocking)
@@ -145,6 +149,62 @@ the 2026-08-31 session entry (4).
   accepted v1 limitation in the implementation plan, not solved.
 
 ## Sessions
+
+### 2026-08-31 (11)
+
+- **Built `mycommunity-service` Phase 8: Amenities**, continuing the
+  roadmap from session (5) — two entities in one phase, matching how
+  both the original data-model plan and the Mygate feature list treated
+  Amenity/AmenityBooking as one unit (unlike Billing/Payments, which the
+  plan split in two). `Amenity` (community FK, name, description, paid
+  boolean, fee `BigDecimal` — informational only, no payment collection
+  wired up; a paid amenity's fee would go through the existing
+  Bill/Payment system manually, not a new specialized flow — rules free
+  text, active boolean) and `AmenityBooking` (community FK, amenity FK,
+  member FK, bookingDate, slot free-text label, status `PENDING`/
+  `APPROVED`/`REJECTED`/`CANCELLED`), `AmenityRepository`/
+  `AmenityBookingRepository`, `AmenityRequest`/`AmenityBookingRequest`/
+  `AmenityResponse`/`AmenityBookingResponse`, `AmenityService`/
+  `AmenityBookingService`, ten new endpoints on `CommunityController`,
+  `V8__amenity.sql`.
+  - **Reused two established patterns rather than inventing new ones**:
+    booking's PENDING/APPROVED/REJECTED lifecycle mirrors
+    `CommunityJoinRequest`'s exactly; booker-or-ADMIN cancel/approve
+    authorization mirrors Phase 7's host-or-ADMIN check-in/check-out
+    shape. `AmenityService.requireAmenity`/`toResponse` made
+    package-private for `AmenityBookingService` to reuse, same convention
+    as `BillService.requireBill` and `AnnouncementService.toResponse`
+    earlier.
+  - No hard delete for `Amenity` — an amenity with booking history can't
+    be removed without breaking that history (FK constraint), so
+    retiring one soft-deactivates it instead (`active` boolean,
+    `PATCH .../amenities/{id}/deactivate`); no reactivate endpoint yet
+    (not asked for).
+  - Double-booking conflict check on create: rejects (409) a new booking
+    for the same amenity+date+slot if a PENDING-or-APPROVED booking
+    already exists for it — CANCELLED/REJECTED bookings don't block a
+    new attempt.
+  - 17 new unit tests (`AmenityServiceTest` 8, `AmenityBookingServiceTest`
+    9) — all pass. Full suite: 82/82 across the ten service test classes;
+    the one pre-existing DB-dependent context test still needs a live
+    Postgres.
+  - **Live-verified end-to-end** against the rebuilt dev container: `V8`
+    applied (`flyway_schema_history` confirms). Reused community id 2.
+    Confirmed: non-admin amenity create → 403; free amenity create →
+    201; paid amenity with a fee → 201; paid amenity with no fee → 400;
+    any member browses amenities (both visible) → 200; a resident books
+    a slot → 201 PENDING; a *different* member booking the exact same
+    amenity/date/slot → 409, but a different slot the same date → 201
+    (conflict check is scoped correctly, not date-only); non-admin
+    approve → 403; admin approve → 200 APPROVED; approving again → 409;
+    admin reject → 200 REJECTED; the booker cancels their own approved
+    booking → 200 CANCELLED; cancelling again → 409; a non-owner
+    non-admin trying to cancel someone else's booking → 403; admin
+    listing all bookings vs. resident's 403 vs. resident's scoped
+    `/mine` — all correct; a resident `GET`-ing someone else's booking
+    by id → 403; booking a past date → 400; deactivating an amenity →
+    200, booking the now-inactive amenity → 409, deactivating again →
+    409; no token → 401.
 
 ### 2026-08-31 (10)
 

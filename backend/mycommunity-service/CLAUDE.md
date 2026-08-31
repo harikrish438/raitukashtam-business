@@ -38,9 +38,10 @@ convention) — this file only covers what's specific to `mycommunity-service`.
   `community_join_request` table; `V3` added the `announcement` table
   (Phase 2); `V4` added the `bill` table (Phase 3); `V5` added the
   `payment` table (Phase 4); `V6` added the `expense` table (Phase 5);
-  `V7` added the `visitor` table (Phase 7). Phase 6 (Dashboard
-  aggregation) added no migration — it's a pure read-model over existing
-  tables, no new schema. See auth-service's own
+  `V7` added the `visitor` table (Phase 7); `V8` added the `amenity` and
+  `amenity_booking` tables (Phase 8). Phase 6 (Dashboard aggregation)
+  added no migration — it's a pure read-model over existing tables, no
+  new schema. See auth-service's own
   Flyway convention (`baseline-on-migrate`/`baseline-version` in
   `application.yml`) — this service now follows the same pattern.
 
@@ -137,6 +138,33 @@ earlier.
   ADMIN additionally sees every visitor in the community
   (`GET .../visitors`); a resident only sees their own
   (`GET .../visitors/mine`) — same visibility split as Bills/Payments.
+- **Amenity** (Phase 8, new 2026-08-31): community (FK), name,
+  description, paid (boolean), fee (`BigDecimal`, only meaningful when
+  paid — **informational only, no payment collection wired up to it**;
+  a paid amenity's actual fee collection would go through the existing
+  Bill/Payment system manually, out of band, not a new specialized flow),
+  rules (free text), active (boolean, default true). ADMIN manages
+  (create/deactivate), any ACTIVE member browses
+  (`GET .../amenities`/`{id}`). No hard delete — an Amenity with booking
+  history can't be removed without breaking that history, so retiring
+  one soft-deactivates it (`PATCH .../amenities/{id}/deactivate`)
+  instead; no reactivate endpoint yet (not asked for, trivial to add).
+- **AmenityBooking** (Phase 8, new 2026-08-31): community (FK), amenity
+  (FK), member (FK, the booker), bookingDate, slot (free-text label like
+  `"18:00-19:00"`, not a structured time range), status (`PENDING`/
+  `APPROVED`/`REJECTED`/`CANCELLED` — mirrors `CommunityJoinRequest`'s
+  lifecycle, a deliberate reuse of an established pattern rather than a
+  new one). Any ACTIVE member books for themselves
+  (`POST .../amenities/{id}/bookings`, rejected 409 if the amenity is
+  inactive or that amenity/date/slot combination already has a
+  PENDING-or-APPROVED booking); ADMIN approves/rejects
+  (`POST .../amenity-bookings/{id}/approve`/`reject`, 409 unless
+  currently PENDING); the booker **or** ADMIN can cancel
+  (`POST .../amenity-bookings/{id}/cancel`, 409 unless currently
+  PENDING/APPROVED) — same booker-or-admin authorization shape Phase 7
+  (Visitors) established for check-in/check-out. ADMIN sees every
+  booking in the community (`GET .../amenity-bookings`); a resident sees
+  only their own (`GET .../amenity-bookings/mine`).
 
 Endpoints (`/api/v1/communities`, all require a Bearer JWT):
 
@@ -177,8 +205,19 @@ Endpoints (`/api/v1/communities`, all require a Bearer JWT):
 | GET | `/api/v1/communities/{id}/visitors/{visitorId}` | Caller must be an ACTIVE ADMIN, or the visitor's host |
 | POST | `/api/v1/communities/{id}/visitors/{visitorId}/check-in` | Caller must be the host or an ACTIVE ADMIN; 409 unless EXPECTED |
 | POST | `/api/v1/communities/{id}/visitors/{visitorId}/check-out` | Caller must be the host or an ACTIVE ADMIN; 409 unless CHECKED_IN |
+| POST | `/api/v1/communities/{id}/amenities` | Caller must be an ACTIVE ADMIN; 400 if paid with no fee |
+| GET | `/api/v1/communities/{id}/amenities` | Any ACTIVE member |
+| GET | `/api/v1/communities/{id}/amenities/{amenityId}` | Any ACTIVE member |
+| PATCH | `/api/v1/communities/{id}/amenities/{amenityId}/deactivate` | Caller must be an ACTIVE ADMIN; 409 if already inactive |
+| POST | `/api/v1/communities/{id}/amenities/{amenityId}/bookings` | Any ACTIVE member; booker = caller; 409 if amenity inactive or slot already taken |
+| GET | `/api/v1/communities/{id}/amenity-bookings` | Caller must be an ACTIVE ADMIN; all bookings in the community |
+| GET | `/api/v1/communities/{id}/amenity-bookings/mine` | Any ACTIVE member; their own bookings only |
+| GET | `/api/v1/communities/{id}/amenity-bookings/{bookingId}` | Caller must be an ACTIVE ADMIN, or the booking's own member |
+| POST | `/api/v1/communities/{id}/amenity-bookings/{bookingId}/approve` | Caller must be an ACTIVE ADMIN; 409 unless PENDING |
+| POST | `/api/v1/communities/{id}/amenity-bookings/{bookingId}/reject` | Caller must be an ACTIVE ADMIN; 409 unless PENDING |
+| POST | `/api/v1/communities/{id}/amenity-bookings/{bookingId}/cancel` | Caller must be the booker or an ACTIVE ADMIN; 409 unless PENDING/APPROVED |
 
-A 13-phase roadmap for the remaining feature areas (amenities, helpdesk,
+A 13-phase roadmap for the remaining feature areas (helpdesk,
 staff/vendor, documents, structured units, committee/RWA, push
 notification delivery) was agreed
 with the user — see repo-root
