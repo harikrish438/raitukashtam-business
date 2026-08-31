@@ -52,6 +52,8 @@ services:
       MAIL_PASSWORD: ${MAIL_PASSWORD:?MAIL_PASSWORD is required in .env.prod}
       RECAPTCHA_SECRET_KEY: ${RECAPTCHA_SECRET_KEY:?RECAPTCHA_SECRET_KEY is required in .env.prod}
       TWOFACTOR_API_KEY: ${TWOFACTOR_API_KEY:?TWOFACTOR_API_KEY is required in .env.prod}
+      MYCOMMUNITY_AWS_ACCESS_KEY_ID: ${MYCOMMUNITY_AWS_ACCESS_KEY_ID:?MYCOMMUNITY_AWS_ACCESS_KEY_ID is required in .env.prod}
+      MYCOMMUNITY_AWS_SECRET_ACCESS_KEY: ${MYCOMMUNITY_AWS_SECRET_ACCESS_KEY:?MYCOMMUNITY_AWS_SECRET_ACCESS_KEY is required in .env.prod}
     volumes:
       - ./infra/vault/vault-init.sh:/vault-init.sh:ro
     entrypoint: ["/bin/sh", "/vault-init.sh"]

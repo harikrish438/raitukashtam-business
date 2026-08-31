@@ -20,6 +20,7 @@
     <properties>
         <java.version>21</java.version>
         <spring-cloud.version>2023.0.3</spring-cloud.version>
+        <aws-sdk.version>2.46.18</aws-sdk.version>
     </properties>
 
     <!-- BOM import must be BEFORE dependencies -->
@@ -29,6 +30,13 @@
                 <groupId>org.springframework.cloud</groupId>
                 <artifactId>spring-cloud-dependencies</artifactId>
                 <version>${spring-cloud.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>bom</artifactId>
+                <version>${aws-sdk.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -100,6 +108,29 @@
         <dependency>
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-vault-config</artifactId>
+        </dependency>
+
+        <!-- Document storage (Phase 11). apache5-client (the S3 module's
+             default sync HTTP engine in this AWS SDK version) pulls in
+             org.apache.httpcomponents.client5, whose version Spring Boot's
+             own dependency management pins older than what this AWS SDK
+             version needs (ClassNotFoundException: TlsSocketStrategy at
+             runtime). Excluded in favor of the AWS SDK's own lightweight
+             URL Connection client instead, sidestepping the conflict
+             rather than fighting BOM version pins. -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>software.amazon.awssdk</groupId>
+                    <artifactId>apache5-client</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>url-connection-client</artifactId>
         </dependency>
     </dependencies>
 

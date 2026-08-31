@@ -12,8 +12,34 @@ networks:
 volumes:
   mycommunity-pgdata:
   mycommunity-logs:
+  mycommunity-localstack-data:
 
 services:
+
+  # LocalStack -- dev-only S3 emulator for Phase 11 (Community Documents),
+  # so document upload/download can be exercised without real AWS
+  # credentials or cost. Not present in docker-compose.test.yml/.prod.yml --
+  # those point mycommunity-service at real AWS S3 instead (see this
+  # service's own CLAUDE.md).
+  localstack:
+    image: localstack/localstack:3
+    container_name: mycommunity-localstack
+    restart: unless-stopped
+    environment:
+      SERVICES: s3
+      DEFAULT_REGION: ap-south-1
+    ports:
+      - "4566:4566"
+    volumes:
+      - mycommunity-localstack-data:/var/lib/localstack
+    networks:
+      - raitukashtam-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   mycommunity-postgres:
     logging:
@@ -59,6 +85,8 @@ services:
     depends_on:
       mycommunity-postgres:
         condition: service_healthy
+      localstack:
+        condition: service_healthy
     environment:
       SPRING_PROFILES_ACTIVE: dev
       VAULT_HOST: vault
@@ -67,6 +95,10 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://mycommunity-postgres:5432/mycommunity-service-db?currentSchema=public&stringtype=unspecified&TimeZone=Asia/Kolkata
       SPRING_DATASOURCE_USERNAME: mycommunity-service-user
       AUTH_SERVICE_URL: http://auth-service:8080
+      AWS_REGION: ap-south-1
+      S3_BUCKET_NAME: mycommunity-documents-dev
+      S3_ENDPOINT_OVERRIDE: http://localstack:4566
+      AWS_S3_AUTO_CREATE_BUCKET: "true"
       JAVA_TOOL_OPTIONS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5007"
     ports:
       - "8081:8081"

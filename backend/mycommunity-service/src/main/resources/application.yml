@@ -49,10 +49,23 @@ spring:
       resourceserver:
         jwt:
           jwk-set-uri: ${AUTH_SERVICE_URL:http://localhost:8080}/oauth2/jwks
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
 
 auth:
   service:
     url: ${AUTH_SERVICE_URL:http://localhost:8080}
+
+# aws.s3.access-key / aws.s3.secret-key come from Vault (secret/mycommunity-service),
+# same pattern as spring.datasource.password -- no default here.
+aws:
+  s3:
+    region: ${AWS_REGION:ap-south-1}
+    bucket-name: ${S3_BUCKET_NAME:mycommunity-documents}
+    endpoint-override: ${S3_ENDPOINT_OVERRIDE:}
+    auto-create-bucket: ${AWS_S3_AUTO_CREATE_BUCKET:false}
 
 management:
   endpoints:

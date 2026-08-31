@@ -43,11 +43,33 @@ convention) — this file only covers what's specific to `mycommunity-service`.
   `complaint_comment` tables (Phase 9); `V10` added the `staff`,
   `staff_attendance`, and `vendor` tables plus a nullable `vendor_id` FK
   on the existing `expense` table (Phase 10) — the first migration to
-  alter a pre-existing table's schema since `V2`. Phase 6 (Dashboard
-  aggregation) added no migration — it's a pure read-model over existing
-  tables, no new schema. See auth-service's own
-  Flyway convention (`baseline-on-migrate`/`baseline-version` in
+  alter a pre-existing table's schema since `V2`; `V11` added
+  `community_document` (Phase 11, metadata only — see Document storage
+  below). Phase 6 (Dashboard aggregation) added no migration — it's a
+  pure read-model over existing tables, no new schema. See auth-service's
+  own Flyway convention (`baseline-on-migrate`/`baseline-version` in
   `application.yml`) — this service now follows the same pattern.
+- **Document storage (Phase 11, new 2026-08-31)**: uploaded file bytes
+  live in **AWS S3** (the user's explicit choice over Postgres BYTEA or
+  deferring file storage entirely — see `PROGRESS.md`'s 2026-08-31
+  session entry (14)), never in Postgres — `community_document` holds
+  metadata only (`s3Key` internal, never returned in API responses). AWS
+  SDK v2 (`software.amazon.awssdk:s3`), configured in `S3Config` — the
+  `apache5-client` HTTP engine the `s3` module pulls in by default
+  conflicts with Spring Boot's own `httpclient5` version pin
+  (`ClassNotFoundException: TlsSocketStrategy` at runtime), so it's
+  excluded in `pom.xml` in favor of the SDK's own `url-connection-client`
+  instead. `aws.s3.access-key`/`aws.s3.secret-key` come from Vault
+  (`secret/mycommunity-service`), same pattern as
+  `spring.datasource.password` — never a default in `application.yml`.
+  **Dev runs against LocalStack** (this directory's own
+  `docker-compose.yml`, `S3_ENDPOINT_OVERRIDE=http://localstack:4566`,
+  `AWS_S3_AUTO_CREATE_BUCKET=true`, dummy `test`/`test` credentials —
+  LocalStack's own documented convention), not real AWS — test/prod
+  compose files leave `S3_ENDPOINT_OVERRIDE` unset so they hit real AWS
+  S3 with real IAM credentials instead (`.env.test.example`/
+  `.env.prod.example` have placeholders, not real keys, same as every
+  other prod secret in this repo).
 
 ## Domain model (Phase 1, extended 2026-08-31 — registration, roles, join requests)
 
@@ -221,6 +243,28 @@ earlier.
   community and be active, else the expense create fails.
   `GET .../vendors/{id}/expenses` lists a vendor's payment history by
   reusing `ExpenseRepository` rather than a new query surface.
+- **CommunityDocument** (Phase 11, new 2026-08-31): community (FK),
+  title, description (optional), category (free text, same open-ended
+  reasoning as `Expense.category`/`Vendor.serviceType`), visibility
+  (enum `ALL_MEMBERS`/`ADMIN_ONLY`, defaults to `ALL_MEMBERS`), s3Key
+  (internal only, never serialized in `DocumentResponse`), contentType,
+  fileSizeBytes, uploadedBy (FK → `CommunityMember`). **The only
+  multipart/form-data endpoint in this service** — every other request
+  body is JSON. ADMIN uploads/deletes (matches the management-enters,
+  residents-view shape Announcements established); any ACTIVE member
+  lists/gets/downloads, filtered by visibility (`GET .../documents`
+  silently omits `ADMIN_ONLY` docs for a resident; `GET`/`download` on
+  one directly 403 instead). Upload validates: file present and ≤10MB
+  (`spring.servlet.multipart.max-file-size`), content type against an
+  explicit allowlist (PDF, common image/Office formats — arbitrary file
+  upload is a real vector this closes off deliberately, not an
+  oversight), title/category non-blank (validated in `DocumentService`,
+  not declarative `@Valid`, since multipart form fields don't bind to a
+  single request DTO the way every other endpoint's JSON body does).
+  S3 key convention: `communities/{communityId}/documents/{uuid}-{sanitizedFilename}`.
+  Deleting a document deletes both the S3 object and the metadata row —
+  no soft-delete here (unlike `Amenity`/`Staff`/`Vendor`), since nothing
+  else references a document by FK.
 
 Endpoints (`/api/v1/communities`, all require a Bearer JWT):
 
@@ -291,10 +335,15 @@ Endpoints (`/api/v1/communities`, all require a Bearer JWT):
 | GET | `/api/v1/communities/{id}/vendors/{vendorId}` | Caller must be an ACTIVE ADMIN |
 | PATCH | `/api/v1/communities/{id}/vendors/{vendorId}/deactivate` | Caller must be an ACTIVE ADMIN; 409 if already inactive |
 | GET | `/api/v1/communities/{id}/vendors/{vendorId}/expenses` | Caller must be an ACTIVE ADMIN; that vendor's linked expenses ("vendor payments") |
+| POST | `/api/v1/communities/{id}/documents` | Caller must be an ACTIVE ADMIN; `multipart/form-data` (`file`, `title`, `category`, optional `description`/`visibility`) |
+| GET | `/api/v1/communities/{id}/documents` | Any ACTIVE member; `ADMIN_ONLY` docs silently omitted for non-admins |
+| GET | `/api/v1/communities/{id}/documents/{documentId}` | Caller must be an ACTIVE ADMIN, or visibility is `ALL_MEMBERS` |
+| GET | `/api/v1/communities/{id}/documents/{documentId}/download` | Same visibility rule as above; returns the raw file bytes |
+| DELETE | `/api/v1/communities/{id}/documents/{documentId}` | Caller must be an ACTIVE ADMIN; deletes the S3 object too |
 
-A 13-phase roadmap for the remaining feature areas (documents,
-structured units, committee/RWA, push notification delivery) was agreed
-with the user — see repo-root
+A 13-phase roadmap for the remaining feature areas (structured units,
+committee/RWA, push notification delivery) was agreed with the user —
+see repo-root
 `PROGRESS.md`'s 2026-08-31 session entry (5). The original full data
 model sketch for these is in `~/.claude/plans/validated-rolling-pizza.md`
 (from the session Phase 1 was planned in) or ask for it if that file
@@ -348,6 +397,17 @@ docker compose up -d --build       # DEV
 Tearing down or redeploying this stack does not touch the platform stack or
 any other business service's stack, and vice versa — they're all separate
 Compose projects sharing one Docker network.
+
+The DEV stack also brings up **LocalStack** (`localstack/localstack:3`,
+S3 only), so Phase 11's document upload/download can be exercised
+without real AWS — `mycommunity-service` auto-creates its dev bucket
+(`mycommunity-documents-dev`) on startup against it
+(`AWS_S3_AUTO_CREATE_BUCKET=true`, dev-only). To inspect it directly:
+`docker exec mycommunity-localstack awslocal s3 ls s3://mycommunity-documents-dev/ --recursive`.
+TEST/PROD compose files have no LocalStack service — they point at real
+AWS S3 instead (`S3_ENDPOINT_OVERRIDE` unset, real IAM credentials from
+`.env.test`/`.env.prod`, and the bucket must already exist — no
+auto-create outside dev).
 
 Watch out for **container name collisions** with leftover containers from
 other Compose projects (e.g. an old stack in the platform repo that used to

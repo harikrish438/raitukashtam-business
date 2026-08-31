@@ -75,7 +75,13 @@ correction need, unlike Bill generation) + `Vendor` (soft-deactivate);
 "vendor payments" reuses the existing `Expense` entity via a new
 nullable `vendor` FK rather than a new entity — the first migration to
 alter a pre-existing table since `V2` — see the 2026-08-31 session
-entry (13).
+entry (13). And **Phase 11 (Community Documents)**: uploaded file bytes
+live in **AWS S3** (the user's explicit choice, not Postgres BYTEA or
+deferring storage — see the 2026-08-31 session entry (14)), dev running
+against a new LocalStack container so this could be live-verified
+end-to-end without real AWS; ADMIN uploads/deletes, any ACTIVE member
+lists/gets/downloads filtered by `ALL_MEMBERS`/`ADMIN_ONLY` visibility.
+This service's first (and only) multipart/form-data endpoint.
 auth-service also gained a self-service `PATCH /users/me` (firstName/
 lastName/email, partial update) — the account-level counterpart to
 mycommunity-service's own member-profile update, closing a gap surfaced
@@ -89,16 +95,22 @@ the 2026-08-31 session entry (4).
 
 ## Open items / next steps
 
-- Build the remaining `mycommunity-service` phases (documents,
-  structured units, committee/RWA, then push-notification delivery once
-  the mobile app has real networking — see the full phased roadmap
-  agreed with the user in the 2026-08-31 session entry (5)).
-  Announcements (Phase 2), Maintenance & Billing generation+status
-  (Phase 3), Payments (Phase 4), Expenses (Phase 5), Dashboard
-  aggregation (Phase 6), Visitors (Phase 7), Amenities (Phase 8),
-  Helpdesk/Complaints (Phase 9), and Staff & Vendor management (Phase 10)
-  are now done. Full data model for the rest already designed, see the
-  2026-08-28 session entry below.
+- Build the remaining `mycommunity-service` phases (structured units,
+  committee/RWA, then push-notification delivery once the mobile app has
+  real networking — see the full phased roadmap agreed with the user in
+  the 2026-08-31 session entry (5)). Announcements (Phase 2), Maintenance
+  & Billing generation+status (Phase 3), Payments (Phase 4), Expenses
+  (Phase 5), Dashboard aggregation (Phase 6), Visitors (Phase 7),
+  Amenities (Phase 8), Helpdesk/Complaints (Phase 9), Staff & Vendor
+  management (Phase 10), and Community Documents (Phase 11) are now done.
+  Full data model for the rest already designed, see the 2026-08-28
+  session entry below.
+- **Production S3 bucket doesn't exist yet** — Phase 11 (Documents) is
+  built and live-verified against LocalStack in dev only.
+  `.env.test.example`/`.env.prod.example` have placeholder AWS IAM
+  credentials, same as every other prod secret in this repo — actually
+  provisioning a real S3 bucket + least-privilege IAM user for test/prod
+  is part of the still-undecided AWS deploy pipeline work below, not done.
 - **Push notification delivery is explicitly out of scope for now** —
   discussed with the user when scoping Announcements: needs FCM
   integration, a device-token registration endpoint, and (blocking)
@@ -162,6 +174,85 @@ the 2026-08-31 session entry (4).
   accepted v1 limitation in the implementation plan, not solved.
 
 ## Sessions
+
+### 2026-08-31 (14)
+
+- **Built `mycommunity-service` Phase 11: Community Documents**,
+  continuing the roadmap from session (5). Unlike every prior phase, this
+  one needed a real architecture decision before any code: where do
+  uploaded file bytes actually live? Asked the user directly rather than
+  picking silently, since (unlike this session's other judgment calls,
+  e.g. flat billing amounts, ADMIN-only expenses) this one has real
+  production cost/backup implications the user — who owns the eventual
+  AWS deployment — should decide. Offered three options (Postgres BYTEA,
+  AWS S3, metadata-only deferred); **user chose AWS S3**.
+  - `CommunityDocument` entity (community FK, title, description,
+    free-text category, visibility enum `ALL_MEMBERS`/`ADMIN_ONLY`,
+    s3Key — internal only, never serialized — contentType,
+    fileSizeBytes, uploadedBy FK). `CommunityDocumentRepository`,
+    `DocumentResponse`, `S3Config` (AWS SDK v2 `S3Client` bean,
+    credentials from Vault same as `spring.datasource.password`, dev-only
+    `endpoint-override` for LocalStack), `DocumentStorageService` (thin
+    S3 wrapper: upload/download/delete by key, dev-only bucket
+    auto-create), `DocumentService` (upload validation: file present,
+    ≤10MB, content-type allowlist against arbitrary file upload, visible
+    filtered on every read path), five new endpoints on
+    `CommunityController` — **this service's first and only
+    multipart/form-data endpoint**, deliberately still placed in the same
+    (very large — now ~750 lines) `CommunityController` rather than
+    splitting it out, matching ten straight phases of established
+    precedent over an unrequested refactor. `V11__community_document.sql`.
+  - **Real infrastructure work, not just application code**: added the
+    AWS SDK v2 BOM + `s3`/`url-connection-client` dependencies to
+    `pom.xml`; added `MYCOMMUNITY_AWS_ACCESS_KEY_ID`/
+    `MYCOMMUNITY_AWS_SECRET_ACCESS_KEY` through the same root
+    `.env`→`vault-init.sh`→`secret/mycommunity-service` pipeline every
+    other secret in this repo already follows (`aws.s3.access-key`/
+    `aws.s3.secret-key`), mirrored into all three root env-example files
+    and all three root `docker-compose*.yml` vault-init blocks for
+    consistency even though only dev was live-verified this session; a
+    new `localstack` service in `mycommunity-service`'s own (dev-only)
+    `docker-compose.yml` so S3 could be exercised for real without AWS
+    cost or credentials, `AWS_S3_AUTO_CREATE_BUCKET=true` dev-only so the
+    bucket provisions itself on first boot.
+  - **Hit and fixed two real bugs during live-verification, not just
+    unit tests**:
+    1. Runtime `ClassNotFoundException: TlsSocketStrategy` on first boot
+       — the AWS SDK's default `apache5-client` HTTP engine pulls a newer
+       `httpclient5` than Spring Boot's own dependency management pins.
+       First fix attempt excluded the wrong artifactId (`apache-client`,
+       the pre-5.x name) and didn't work; `mvn dependency:tree` showed
+       the real one (`apache5-client`); excluding that one and adding
+       `url-connection-client` instead (a lighter engine with no
+       conflicting transitive deps) fixed it cleanly.
+    2. `Content-Disposition: filename*=UTF-8''...` used raw
+       `URLEncoder.encode` output, which is form-encoding (spaces → `+`)
+       — RFC 5987 needs percent-encoding (spaces → `%20`), so a
+       downloaded "Society Rules" would have literally saved as
+       "Society+Rules". Caught by actually downloading a file with curl
+       and inspecting the header, not by reading the code. Fixed with
+       the standard `.replace("+", "%20")` idiom.
+  - 14 new unit tests (`DocumentServiceTest`, using Spring's
+    `MockMultipartFile`) — all pass. Full suite: 128/128 across the
+    sixteen service test classes; the one pre-existing DB-dependent
+    context test still needs a live Postgres.
+  - **Live-verified end-to-end against real S3 API calls** (LocalStack,
+    not mocks): confirmed the bucket auto-created on boot
+    (`mycommunity-documents-dev`); non-admin upload → 403; admin upload
+    of a real PDF → 201; an `ADMIN_ONLY` upload, then confirmed via
+    `docker exec ... awslocal s3 ls` that the object genuinely exists in
+    S3 with the expected key; unsupported content-type (`.exe`) → 400;
+    blank title → 400; admin list sees both documents, resident list
+    silently shows only the `ALL_MEMBERS` one; resident `GET`/`download`
+    directly on the `ADMIN_ONLY` doc → 403 both; **downloaded a
+    document's bytes and diffed them against the original file — byte-
+    identical round-trip through real S3**; confirmed the
+    `Content-Disposition` header after the encoding fix; admin delete →
+    204, then confirmed via `awslocal s3 ls` that the **S3 object itself
+    was actually removed**, not just the DB row; deleted-document
+    `GET` → 404; nonexistent document → 404; no token → 401. Also
+    **discovered and worked around JWT expiry again** (same as session
+    (13)) — re-minted both test identities' tokens partway through.
 
 ### 2026-08-31 (13)
 

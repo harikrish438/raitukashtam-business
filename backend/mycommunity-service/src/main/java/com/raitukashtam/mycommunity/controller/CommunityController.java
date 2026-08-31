@@ -12,6 +12,7 @@ import com.raitukashtam.mycommunity.request.ComplaintStatusRequest;
 import com.raitukashtam.mycommunity.request.CreateVisitorRequest;
 import com.raitukashtam.mycommunity.request.ExpenseRequest;
 import com.raitukashtam.mycommunity.request.GenerateBillsRequest;
+import com.raitukashtam.mycommunity.entity.DocumentVisibility;
 import com.raitukashtam.mycommunity.request.JoinRequestRequest;
 import com.raitukashtam.mycommunity.request.MarkAttendanceRequest;
 import com.raitukashtam.mycommunity.request.MemberProfileUpdateRequest;
@@ -27,6 +28,8 @@ import com.raitukashtam.mycommunity.response.CommunityResponse;
 import com.raitukashtam.mycommunity.response.ComplaintCommentResponse;
 import com.raitukashtam.mycommunity.response.ComplaintResponse;
 import com.raitukashtam.mycommunity.response.DashboardResponse;
+import com.raitukashtam.mycommunity.response.DocumentDownloadResult;
+import com.raitukashtam.mycommunity.response.DocumentResponse;
 import com.raitukashtam.mycommunity.response.ExpenseResponse;
 import com.raitukashtam.mycommunity.response.JoinRequestResponse;
 import com.raitukashtam.mycommunity.response.MyCommunityResponse;
@@ -44,6 +47,7 @@ import com.raitukashtam.mycommunity.service.CommunityService;
 import com.raitukashtam.mycommunity.service.ComplaintCommentService;
 import com.raitukashtam.mycommunity.service.ComplaintService;
 import com.raitukashtam.mycommunity.service.DashboardService;
+import com.raitukashtam.mycommunity.service.DocumentService;
 import com.raitukashtam.mycommunity.service.ExpenseService;
 import com.raitukashtam.mycommunity.service.PaymentService;
 import com.raitukashtam.mycommunity.service.StaffAttendanceService;
@@ -52,13 +56,17 @@ import com.raitukashtam.mycommunity.service.VendorService;
 import com.raitukashtam.mycommunity.service.VisitorService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 @RestController
@@ -109,6 +117,9 @@ public class CommunityController {
 
     @Autowired
     private VendorService vendorService;
+
+    @Autowired
+    private DocumentService documentService;
 
     @PostMapping
     public ResponseEntity<CommunityResponse> createCommunity(@RequestBody @Validated CommunityRequest request,
@@ -620,5 +631,59 @@ public class CommunityController {
                                                          @AuthenticationPrincipal Jwt jwt) {
         log.info("Inside listExpensesForVendor method of CommunityController");
         return expenseService.listExpensesForVendor(communityId, vendorId, jwt.getSubject());
+    }
+
+    @PostMapping(value = "/{communityId}/documents", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<DocumentResponse> uploadDocument(@PathVariable("communityId") Long communityId,
+                                                             @RequestParam("file") MultipartFile file,
+                                                             @RequestParam("title") String title,
+                                                             @RequestParam(value = "description", required = false) String description,
+                                                             @RequestParam("category") String category,
+                                                             @RequestParam(value = "visibility", required = false) DocumentVisibility visibility,
+                                                             @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside uploadDocument method of CommunityController");
+        return new ResponseEntity<>(
+                documentService.uploadDocument(communityId, file, title, description, category, visibility, jwt.getSubject()),
+                HttpStatus.CREATED);
+    }
+
+    @GetMapping("/{communityId}/documents")
+    public List<DocumentResponse> listDocuments(@PathVariable("communityId") Long communityId,
+                                                 @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside listDocuments method of CommunityController");
+        return documentService.listDocuments(communityId, jwt.getSubject());
+    }
+
+    @GetMapping("/{communityId}/documents/{documentId}")
+    public DocumentResponse getDocument(@PathVariable("communityId") Long communityId,
+                                         @PathVariable("documentId") Long documentId,
+                                         @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside getDocument method of CommunityController");
+        return documentService.getDocument(communityId, documentId, jwt.getSubject());
+    }
+
+    @GetMapping("/{communityId}/documents/{documentId}/download")
+    public ResponseEntity<byte[]> downloadDocument(@PathVariable("communityId") Long communityId,
+                                                     @PathVariable("documentId") Long documentId,
+                                                     @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside downloadDocument method of CommunityController");
+        DocumentDownloadResult result = documentService.downloadDocument(communityId, documentId, jwt.getSubject());
+        // URLEncoder is form-encoding (spaces -> "+"), but RFC 5987's filename*=
+        // needs percent-encoding (spaces -> "%20") -- the standard idiom to get
+        // one from the other, since the JDK has no built-in RFC 5987 encoder.
+        String encodedFilename = java.net.URLEncoder.encode(result.filename(), StandardCharsets.UTF_8).replace("+", "%20");
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(result.contentType()))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename*=UTF-8''" + encodedFilename)
+                .body(result.content());
+    }
+
+    @DeleteMapping("/{communityId}/documents/{documentId}")
+    public ResponseEntity<Void> deleteDocument(@PathVariable("communityId") Long communityId,
+                                                @PathVariable("documentId") Long documentId,
+                                                @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside deleteDocument method of CommunityController");
+        documentService.deleteDocument(communityId, documentId, jwt.getSubject());
+        return ResponseEntity.noContent().build();
     }
 }
