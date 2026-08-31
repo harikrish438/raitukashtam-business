@@ -40,7 +40,12 @@ wasn't invited — see the 2026-08-31 session entry. This service also
 gained its first Flyway migrations (previously Hibernate `ddl-auto` only).
 `mycommunity-service` now also has **Phase 2 (Announcements)**: ADMIN
 posts, any ACTIVE member reads — pure data+API, no push notifications
-(deliberately deferred, see the 2026-08-31 session entry (5)).
+(deliberately deferred, see the 2026-08-31 session entry (5)). And
+**Phase 3 (Maintenance & Billing, generation + status only)**: ADMIN
+generates one `Bill` per currently-ACTIVE member at a flat amount for a
+period, marks paid; residents see their own bills, admins see all — no
+payment gateway, no separate Payment/receipt entity yet (that's Phase 4)
+— see the 2026-08-31 session entry (6).
 auth-service also gained a self-service `PATCH /users/me` (firstName/
 lastName/email, partial update) — the account-level counterpart to
 mycommunity-service's own member-profile update, closing a gap surfaced
@@ -54,11 +59,12 @@ the 2026-08-31 session entry (4).
 
 ## Open items / next steps
 
-- Build the remaining `mycommunity-service` phases (bills/payments,
-  expenses, dashboard aggregation, visitors, amenities, then push-
-  notification delivery once the mobile app has real networking — see the
-  full phased roadmap agreed with the user in the 2026-08-31 session
-  entry (5)). Announcements (Phase 2) is now done. Full data model for
+- Build the remaining `mycommunity-service` phases (Payments/receipts
+  against existing Bills, expenses, dashboard aggregation, visitors,
+  amenities, then push-notification delivery once the mobile app has real
+  networking — see the full phased roadmap agreed with the user in the
+  2026-08-31 session entry (5)). Announcements (Phase 2) and Maintenance &
+  Billing generation+status (Phase 3) are now done. Full data model for
   the rest already designed, see the 2026-08-28 session entry below.
 - **Push notification delivery is explicitly out of scope for now** —
   discussed with the user when scoping Announcements: needs FCM
@@ -123,6 +129,49 @@ the 2026-08-31 session entry (4).
   accepted v1 limitation in the implementation plan, not solved.
 
 ## Sessions
+
+### 2026-08-31 (6)
+
+- **Built `mycommunity-service` Phase 3: Maintenance & Billing
+  (generation + status only, no payment gateway/receipts — that's
+  Phase 4)**, continuing the roadmap from session (5). Design call made
+  without asking: a single flat amount per generation batch, applied to
+  every currently-ACTIVE member — `Community` has no per-unit size/area
+  field yet to vary the amount by (that's Phase 12, structured units),
+  so a flat amount was the only sound default. Stated this explicitly to
+  the user rather than silently assuming it.
+  - `Bill` entity (community FK, member FK → `CommunityMember`, period
+    `YYYY-MM`, `BigDecimal` amount, status `PENDING`/`PAID`, dueDate,
+    paidAt), unique on (member, period). `BillRepository`,
+    `GenerateBillsRequest`/`BillResponse`, `BillService` (same
+    delegate-to-`CommunityService` authorization pattern as
+    `AnnouncementService`), five endpoints on `CommunityController`
+    (`POST .../bills/generate`, `GET .../bills` [admin, all],
+    `GET .../bills/mine` [own], `GET .../bills/{id}`, `PATCH
+    .../bills/{id}/mark-paid`), `V4__bill.sql`. Added
+    `CommunityMemberRepository.findByCommunity_IdAndStatus` (didn't
+    exist — prior code only had the unfiltered `findByCommunity_Id`).
+  - 8 new unit tests (`BillServiceTest`, same mocked-repos-plus-real-
+    `CommunityService` pattern as `AnnouncementServiceTest`) — all pass.
+    Full suite unaffected: 35/35 across the four service test classes
+    (`CommunityServiceTest` 13, `CommunityJoinRequestServiceTest` 7,
+    `AnnouncementServiceTest` 7, `BillServiceTest` 8); the one
+    pre-existing DB-dependent context test still needs a live Postgres,
+    same as every prior session.
+  - **Live-verified end-to-end** against the rebuilt dev container: `V4`
+    applied (`flyway_schema_history` confirms). Reused the same two test
+    identities/community (id 2) from session (5)'s Announcement
+    live-verify. Confirmed: `generate` creates one Bill per ACTIVE member
+    (both the ADMIN and the RESIDENT) at the requested amount/period,
+    201; regenerating the same period → 409; non-admin generate → 403;
+    admin `GET .../bills` sees both, 200; resident `GET .../bills` → 403
+    (admin-only, financial data across all members); resident
+    `GET .../bills/mine` → only their own bill, 200; resident `GET
+    .../bills/{id}` on someone else's bill → 403, on their own → 200;
+    resident `mark-paid` → 403; admin `mark-paid` → 200, `status` flips
+    to `PAID` with `paidAt` set; marking an already-paid bill again →
+    409; invalid period format / zero amount → 400; nonexistent bill id
+    → 404; no token → 401.
 
 ### 2026-08-31 (5)
 

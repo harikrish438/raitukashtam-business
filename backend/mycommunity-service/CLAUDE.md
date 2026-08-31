@@ -36,9 +36,9 @@ convention) — this file only covers what's specific to `mycommunity-service`.
   generated from `pg_dump` against the live dev schema at the time; `V2`
   renamed `CommunityRole.OWNER` to `RESIDENT` and added the
   `community_join_request` table; `V3` added the `announcement` table
-  (Phase 2). See auth-service's own Flyway convention
-  (`baseline-on-migrate`/`baseline-version` in `application.yml`) — this
-  service now follows the same pattern.
+  (Phase 2); `V4` added the `bill` table (Phase 3). See auth-service's own
+  Flyway convention (`baseline-on-migrate`/`baseline-version` in
+  `application.yml`) — this service now follows the same pattern.
 
 ## Domain model (Phase 1, extended 2026-08-31 — registration, roles, join requests)
 
@@ -65,6 +65,16 @@ convention) — this file only covers what's specific to `mycommunity-service`.
   read. Pure data+API — no push notification delivery (deliberately
   deferred to a later phase; see repo-root `PROGRESS.md`'s 2026-08-31
   session entry (5) for why).
+- **Bill** (Phase 3, new 2026-08-31): community (FK), member (FK →
+  `CommunityMember`), period (`YYYY-MM`), amount (`BigDecimal`), status
+  (`PENDING`/`PAID`), dueDate, paidAt. One bill per member per period
+  (unique constraint) — `POST .../bills/generate` creates one for every
+  currently-ACTIVE member at a single flat amount per batch (`Community`
+  has no per-unit size/area field yet to vary it by; that's Phase 12).
+  409s if that period was already generated for the community. No
+  separate `Payment`/receipt entity or payment-method tracking yet —
+  `markPaid` is a bare status transition (ADMIN only); richer payment
+  history/receipts is Phase 4.
 
 Endpoints (`/api/v1/communities`, all require a Bearer JWT):
 
@@ -86,8 +96,13 @@ Endpoints (`/api/v1/communities`, all require a Bearer JWT):
 | GET | `/api/v1/communities/{id}/announcements` | Caller must be an ACTIVE member; newest first |
 | GET | `/api/v1/communities/{id}/announcements/{announcementId}` | Caller must be an ACTIVE member |
 | DELETE | `/api/v1/communities/{id}/announcements/{announcementId}` | Caller must be an ACTIVE ADMIN |
+| POST | `/api/v1/communities/{id}/bills/generate` | Caller must be an ACTIVE ADMIN; one Bill per currently-ACTIVE member; 409 if the period was already generated |
+| GET | `/api/v1/communities/{id}/bills` | Caller must be an ACTIVE ADMIN; all bills in the community |
+| GET | `/api/v1/communities/{id}/bills/mine` | Any ACTIVE member; their own bills only |
+| GET | `/api/v1/communities/{id}/bills/{billId}` | Caller must be an ACTIVE ADMIN, or the bill's own member |
+| PATCH | `/api/v1/communities/{id}/bills/{billId}/mark-paid` | Caller must be an ACTIVE ADMIN; 409 if already PAID |
 
-A 13-phase roadmap for the remaining feature areas (bills/payments,
+A 13-phase roadmap for the remaining feature areas (payments/receipts,
 expenses, dashboard aggregation, visitors, amenities, helpdesk,
 staff/vendor, documents, structured units, committee/RWA, push
 notification delivery) was agreed with the user — see repo-root
