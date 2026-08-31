@@ -13,8 +13,11 @@ import com.raitukashtam.mycommunity.request.CreateVisitorRequest;
 import com.raitukashtam.mycommunity.request.ExpenseRequest;
 import com.raitukashtam.mycommunity.request.GenerateBillsRequest;
 import com.raitukashtam.mycommunity.request.JoinRequestRequest;
+import com.raitukashtam.mycommunity.request.MarkAttendanceRequest;
 import com.raitukashtam.mycommunity.request.MemberProfileUpdateRequest;
 import com.raitukashtam.mycommunity.request.RecordPaymentRequest;
+import com.raitukashtam.mycommunity.request.StaffRequest;
+import com.raitukashtam.mycommunity.request.VendorRequest;
 import com.raitukashtam.mycommunity.response.AmenityBookingResponse;
 import com.raitukashtam.mycommunity.response.AmenityResponse;
 import com.raitukashtam.mycommunity.response.AnnouncementResponse;
@@ -28,6 +31,9 @@ import com.raitukashtam.mycommunity.response.ExpenseResponse;
 import com.raitukashtam.mycommunity.response.JoinRequestResponse;
 import com.raitukashtam.mycommunity.response.MyCommunityResponse;
 import com.raitukashtam.mycommunity.response.PaymentResponse;
+import com.raitukashtam.mycommunity.response.StaffAttendanceResponse;
+import com.raitukashtam.mycommunity.response.StaffResponse;
+import com.raitukashtam.mycommunity.response.VendorResponse;
 import com.raitukashtam.mycommunity.response.VisitorResponse;
 import com.raitukashtam.mycommunity.service.AmenityBookingService;
 import com.raitukashtam.mycommunity.service.AmenityService;
@@ -40,6 +46,9 @@ import com.raitukashtam.mycommunity.service.ComplaintService;
 import com.raitukashtam.mycommunity.service.DashboardService;
 import com.raitukashtam.mycommunity.service.ExpenseService;
 import com.raitukashtam.mycommunity.service.PaymentService;
+import com.raitukashtam.mycommunity.service.StaffAttendanceService;
+import com.raitukashtam.mycommunity.service.StaffService;
+import com.raitukashtam.mycommunity.service.VendorService;
 import com.raitukashtam.mycommunity.service.VisitorService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -91,6 +100,15 @@ public class CommunityController {
 
     @Autowired
     private ComplaintCommentService complaintCommentService;
+
+    @Autowired
+    private StaffService staffService;
+
+    @Autowired
+    private StaffAttendanceService staffAttendanceService;
+
+    @Autowired
+    private VendorService vendorService;
 
     @PostMapping
     public ResponseEntity<CommunityResponse> createCommunity(@RequestBody @Validated CommunityRequest request,
@@ -515,5 +533,92 @@ public class CommunityController {
                                                                   @AuthenticationPrincipal Jwt jwt) {
         log.info("Inside listComplaintComments method of CommunityController");
         return complaintCommentService.listComments(communityId, complaintId, jwt.getSubject());
+    }
+
+    @PostMapping("/{communityId}/staff")
+    public ResponseEntity<StaffResponse> createStaff(@PathVariable("communityId") Long communityId,
+                                                       @RequestBody @Validated StaffRequest request,
+                                                       @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside createStaff method of CommunityController");
+        return new ResponseEntity<>(staffService.createStaff(communityId, request, jwt.getSubject()), HttpStatus.CREATED);
+    }
+
+    @GetMapping("/{communityId}/staff")
+    public List<StaffResponse> listStaff(@PathVariable("communityId") Long communityId,
+                                          @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside listStaff method of CommunityController");
+        return staffService.listStaff(communityId, jwt.getSubject());
+    }
+
+    @GetMapping("/{communityId}/staff/{staffId}")
+    public StaffResponse getStaff(@PathVariable("communityId") Long communityId,
+                                   @PathVariable("staffId") Long staffId,
+                                   @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside getStaff method of CommunityController");
+        return staffService.getStaff(communityId, staffId, jwt.getSubject());
+    }
+
+    @PatchMapping("/{communityId}/staff/{staffId}/deactivate")
+    public StaffResponse deactivateStaff(@PathVariable("communityId") Long communityId,
+                                          @PathVariable("staffId") Long staffId,
+                                          @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside deactivateStaff method of CommunityController");
+        return staffService.deactivateStaff(communityId, staffId, jwt.getSubject());
+    }
+
+    @PostMapping("/{communityId}/staff/{staffId}/attendance")
+    public StaffAttendanceResponse markAttendance(@PathVariable("communityId") Long communityId,
+                                                   @PathVariable("staffId") Long staffId,
+                                                   @RequestBody @Validated MarkAttendanceRequest request,
+                                                   @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside markAttendance method of CommunityController");
+        return staffAttendanceService.markAttendance(communityId, staffId, request, jwt.getSubject());
+    }
+
+    @GetMapping("/{communityId}/staff/{staffId}/attendance")
+    public List<StaffAttendanceResponse> listAttendance(@PathVariable("communityId") Long communityId,
+                                                          @PathVariable("staffId") Long staffId,
+                                                          @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside listAttendance method of CommunityController");
+        return staffAttendanceService.listAttendance(communityId, staffId, jwt.getSubject());
+    }
+
+    @PostMapping("/{communityId}/vendors")
+    public ResponseEntity<VendorResponse> createVendor(@PathVariable("communityId") Long communityId,
+                                                         @RequestBody @Validated VendorRequest request,
+                                                         @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside createVendor method of CommunityController");
+        return new ResponseEntity<>(vendorService.createVendor(communityId, request, jwt.getSubject()), HttpStatus.CREATED);
+    }
+
+    @GetMapping("/{communityId}/vendors")
+    public List<VendorResponse> listVendors(@PathVariable("communityId") Long communityId,
+                                             @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside listVendors method of CommunityController");
+        return vendorService.listVendors(communityId, jwt.getSubject());
+    }
+
+    @GetMapping("/{communityId}/vendors/{vendorId}")
+    public VendorResponse getVendor(@PathVariable("communityId") Long communityId,
+                                     @PathVariable("vendorId") Long vendorId,
+                                     @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside getVendor method of CommunityController");
+        return vendorService.getVendor(communityId, vendorId, jwt.getSubject());
+    }
+
+    @PatchMapping("/{communityId}/vendors/{vendorId}/deactivate")
+    public VendorResponse deactivateVendor(@PathVariable("communityId") Long communityId,
+                                            @PathVariable("vendorId") Long vendorId,
+                                            @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside deactivateVendor method of CommunityController");
+        return vendorService.deactivateVendor(communityId, vendorId, jwt.getSubject());
+    }
+
+    @GetMapping("/{communityId}/vendors/{vendorId}/expenses")
+    public List<ExpenseResponse> listExpensesForVendor(@PathVariable("communityId") Long communityId,
+                                                         @PathVariable("vendorId") Long vendorId,
+                                                         @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside listExpensesForVendor method of CommunityController");
+        return expenseService.listExpensesForVendor(communityId, vendorId, jwt.getSubject());
     }
 }

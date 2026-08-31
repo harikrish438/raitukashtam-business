@@ -26,4 +26,7 @@ public class ExpenseRequest {
     /** Optional -- defaults to today. Lets an admin back-date an expense logged after the fact. */
     @PastOrPresent(message = "Expense date cannot be in the future")
     private LocalDate expenseDate;
+
+    /** Optional -- links this expense to a Vendor as a payment against them. */
+    private Long vendorId;
 }

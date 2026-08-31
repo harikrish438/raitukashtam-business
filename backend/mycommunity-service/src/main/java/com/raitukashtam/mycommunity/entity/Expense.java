@@ -36,4 +36,9 @@ public class Expense extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by_member_id", nullable = false)
     private CommunityMember createdByMember;
+
+    /** Optional -- links this expense to a Vendor as a payment against them. Null for expenses with no vendor. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "vendor_id")
+    private Vendor vendor;
 }

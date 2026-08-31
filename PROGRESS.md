@@ -68,7 +68,14 @@ booker or ADMIN cancels — see the 2026-08-31 session entry (11). And
 ADMIN assigns/advances status through a strictly linear OPEN→IN_PROGRESS
 →RESOLVED→CLOSED lifecycle (one step at a time, no skipping/reopening),
 visible to ADMIN/raiser/assignee, with a comment thread sharing that same
-visibility rule — see the 2026-08-31 session entry (12).
+visibility rule — see the 2026-08-31 session entry (12). And
+**Phase 10 (Staff & Vendor management)**: ADMIN-only `Staff` (soft-
+deactivate) + `StaffAttendance` (upsert, not duplicate-rejecting — a
+correction need, unlike Bill generation) + `Vendor` (soft-deactivate);
+"vendor payments" reuses the existing `Expense` entity via a new
+nullable `vendor` FK rather than a new entity — the first migration to
+alter a pre-existing table since `V2` — see the 2026-08-31 session
+entry (13).
 auth-service also gained a self-service `PATCH /users/me` (firstName/
 lastName/email, partial update) — the account-level counterpart to
 mycommunity-service's own member-profile update, closing a gap surfaced
@@ -82,16 +89,16 @@ the 2026-08-31 session entry (4).
 
 ## Open items / next steps
 
-- Build the remaining `mycommunity-service` phases (staff/vendor,
-  documents, structured units, committee/RWA, then push-notification
-  delivery once the mobile app has real networking — see the full
-  phased roadmap agreed with the user in the 2026-08-31 session
-  entry (5)). Announcements (Phase 2), Maintenance & Billing
-  generation+status (Phase 3), Payments (Phase 4), Expenses (Phase 5),
-  Dashboard aggregation (Phase 6), Visitors (Phase 7), Amenities
-  (Phase 8), and Helpdesk/Complaints (Phase 9) are now done. Full data
-  model for the rest already designed, see the 2026-08-28 session entry
-  below.
+- Build the remaining `mycommunity-service` phases (documents,
+  structured units, committee/RWA, then push-notification delivery once
+  the mobile app has real networking — see the full phased roadmap
+  agreed with the user in the 2026-08-31 session entry (5)).
+  Announcements (Phase 2), Maintenance & Billing generation+status
+  (Phase 3), Payments (Phase 4), Expenses (Phase 5), Dashboard
+  aggregation (Phase 6), Visitors (Phase 7), Amenities (Phase 8),
+  Helpdesk/Complaints (Phase 9), and Staff & Vendor management (Phase 10)
+  are now done. Full data model for the rest already designed, see the
+  2026-08-28 session entry below.
 - **Push notification delivery is explicitly out of scope for now** —
   discussed with the user when scoping Announcements: needs FCM
   integration, a device-token registration endpoint, and (blocking)
@@ -155,6 +162,71 @@ the 2026-08-31 session entry (4).
   accepted v1 limitation in the implementation plan, not solved.
 
 ## Sessions
+
+### 2026-08-31 (13)
+
+- **Built `mycommunity-service` Phase 10: Staff & Vendor management**,
+  continuing the roadmap from session (5). `Staff` (community FK, name,
+  role enum `SECURITY`/`HOUSEKEEPING`/`MAINTENANCE`/`OTHER`, optional
+  phoneNumber, active boolean), `StaffAttendance` (community FK, staff
+  FK, attendanceDate, status enum `PRESENT`/`ABSENT`/`HALF_DAY`/
+  `ON_LEAVE`, markedBy FK, unique on staff+date), `Vendor` (community FK,
+  name, free-text serviceType, optional contactPerson/phoneNumber, active
+  boolean) — all **ADMIN-only end to end**, same precedent as Expense (no
+  app screen drives this yet). `StaffRepository`/
+  `StaffAttendanceRepository`/`VendorRepository`, three request DTOs/
+  three response DTOs, `StaffService`/`StaffAttendanceService`/
+  `VendorService`, eleven new endpoints, `V10__staff_vendor.sql`.
+  - **"Vendor payments" deliberately isn't a new entity**: `Expense`
+    (Phase 5) gained a nullable `vendor` FK instead — an expense linked
+    to a vendor *is* a vendor payment, same "don't duplicate data that
+    already exists elsewhere" reasoning Dashboard's activity feed and
+    Amenity's fee field already established. This is the **first
+    migration to alter a pre-existing table's schema since `V2`**
+    (`ALTER TABLE expense ADD COLUMN vendor_id` + FK). `ExpenseService`
+    validates the vendor exists in this community and is active before
+    linking (400/404/409, same shape as Amenity booking's amenity
+    validation), and a new `GET .../vendors/{id}/expenses` lists a
+    vendor's payment history by reusing `ExpenseRepository`.
+  - **Attendance marking is an upsert, not a duplicate-rejecting
+    create** — a deliberate departure from the Bill-generation precedent
+    (which rejects a duplicate period outright), because attendance
+    mis-entry is a real, common correction need: a second call for the
+    same staff+date corrects the earlier record (same `id`) rather than
+    409ing.
+  - Soft-deactivate only for both `Staff` and `Vendor` (no hard delete —
+    attendance history and linked expenses would break), same pattern
+    Amenity established in Phase 8.
+  - `StaffService.requireStaff` and `VendorService.requireVendor`/
+    `toResponse` made package-private for `StaffAttendanceService`/
+    `ExpenseService` to reuse — same convention as every prior phase's
+    cross-service lookups.
+  - 19 new unit tests (`StaffServiceTest` 6, `StaffAttendanceServiceTest`
+    3, `VendorServiceTest` 6) plus 4 new tests added to the existing
+    `ExpenseServiceTest` for the vendor linkage (now 12, was 8) — all
+    pass. Full suite: 114/114 across the fifteen service test classes;
+    the one pre-existing DB-dependent context test still needs a live
+    Postgres.
+  - **Live-verified end-to-end** against the rebuilt dev container: `V10`
+    applied (`flyway_schema_history` confirms, including the `expense`
+    table's new column). Reused community id 2. **Discovered and worked
+    around real JWT expiry mid-session**: the access tokens minted early
+    in this multi-hour session had expired (1-hour TTL), surfacing as
+    401s on every request; diagnosed via `docker logs` ("Failed to
+    authenticate since the JWT was invalid"), then re-ran the same
+    register+PKCE scratchpad script for both existing test identities to
+    mint fresh tokens and continued — not a bug, just session longevity.
+    Confirmed: non-admin staff create → 403; admin create → 201; invalid
+    role enum → 400; mark attendance → 200 (new record); marking again
+    for the same date with a different status → 200 correcting the
+    *same* record id, confirmed via the history list showing exactly one
+    entry; marking attendance for a nonexistent staff id → 404; vendor
+    create → 201; expense linked to a valid active vendor → 201 with
+    `vendorName` populated; linking to a nonexistent vendor → 404;
+    listing that vendor's expenses → 200, shows the linked one;
+    deactivating the vendor then trying to link a new expense to it →
+    409; deactivating again → 409; nonexistent vendor get → 404; staff
+    list/deactivate → 200; no token → 401.
 
 ### 2026-08-31 (12)
 

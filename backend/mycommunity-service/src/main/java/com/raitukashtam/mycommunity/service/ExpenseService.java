@@ -3,6 +3,7 @@ package com.raitukashtam.mycommunity.service;
 import com.raitukashtam.mycommunity.entity.Community;
 import com.raitukashtam.mycommunity.entity.CommunityMember;
 import com.raitukashtam.mycommunity.entity.Expense;
+import com.raitukashtam.mycommunity.entity.Vendor;
 import com.raitukashtam.mycommunity.exception.ResourceNotFoundException;
 import com.raitukashtam.mycommunity.repository.CommunityRepository;
 import com.raitukashtam.mycommunity.repository.ExpenseRepository;
@@ -10,8 +11,10 @@ import com.raitukashtam.mycommunity.request.ExpenseRequest;
 import com.raitukashtam.mycommunity.response.ExpenseResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -35,9 +38,20 @@ public class ExpenseService {
     @Autowired
     private CommunityService communityService;
 
+    @Autowired
+    private VendorService vendorService;
+
     @Transactional
     public ExpenseResponse createExpense(Long communityId, ExpenseRequest request, String callerIdentityId) {
         CommunityMember admin = communityService.requireActiveAdmin(communityId, callerIdentityId);
+
+        Vendor vendor = null;
+        if (request.getVendorId() != null) {
+            vendor = vendorService.requireVendor(communityId, request.getVendorId());
+            if (!vendor.isActive()) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Vendor is inactive");
+            }
+        }
 
         Community community = communityRepository.getReferenceById(communityId);
         Expense expense = new Expense();
@@ -47,6 +61,7 @@ public class ExpenseService {
         expense.setAmount(request.getAmount());
         expense.setExpenseDate(request.getExpenseDate() != null ? request.getExpenseDate() : LocalDate.now());
         expense.setCreatedByMember(admin);
+        expense.setVendor(vendor);
         Expense saved = expenseRepository.save(expense);
 
         return toResponse(saved);
@@ -72,6 +87,15 @@ public class ExpenseService {
         expenseRepository.delete(requireExpense(communityId, expenseId));
     }
 
+    @Transactional(readOnly = true)
+    public List<ExpenseResponse> listExpensesForVendor(Long communityId, Long vendorId, String callerIdentityId) {
+        communityService.requireActiveAdmin(communityId, callerIdentityId);
+        vendorService.requireVendor(communityId, vendorId);
+        return expenseRepository.findByVendor_IdOrderByExpenseDateDescCreatedAtDesc(vendorId).stream()
+                .map(this::toResponse)
+                .toList();
+    }
+
     private Expense requireExpense(Long communityId, Long expenseId) {
         return expenseRepository.findByIdAndCommunity_Id(expenseId, communityId)
                 .orElseThrow(() -> new ResourceNotFoundException("Expense not found with id: " + expenseId));
@@ -87,6 +111,8 @@ public class ExpenseService {
                 expense.getExpenseDate(),
                 expense.getCreatedByMember().getId(),
                 expense.getCreatedByMember().getName(),
-                expense.getCreatedAt());
+                expense.getCreatedAt(),
+                expense.getVendor() != null ? expense.getVendor().getId() : null,
+                expense.getVendor() != null ? expense.getVendor().getName() : null);
     }
 }

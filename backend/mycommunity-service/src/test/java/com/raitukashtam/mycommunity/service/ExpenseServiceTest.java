@@ -5,10 +5,12 @@ import com.raitukashtam.mycommunity.entity.CommunityMember;
 import com.raitukashtam.mycommunity.entity.CommunityRole;
 import com.raitukashtam.mycommunity.entity.Expense;
 import com.raitukashtam.mycommunity.entity.MemberStatus;
+import com.raitukashtam.mycommunity.entity.Vendor;
 import com.raitukashtam.mycommunity.exception.ResourceNotFoundException;
 import com.raitukashtam.mycommunity.repository.CommunityMemberRepository;
 import com.raitukashtam.mycommunity.repository.CommunityRepository;
 import com.raitukashtam.mycommunity.repository.ExpenseRepository;
+import com.raitukashtam.mycommunity.repository.VendorRepository;
 import com.raitukashtam.mycommunity.request.ExpenseRequest;
 import com.raitukashtam.mycommunity.response.ExpenseResponse;
 import org.junit.jupiter.api.Test;
@@ -16,6 +18,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -36,6 +39,8 @@ class ExpenseServiceTest {
     private CommunityRepository communityRepository;
     @Mock
     private CommunityMemberRepository communityMemberRepository;
+    @Mock
+    private VendorRepository vendorRepository;
 
     private static final Long COMMUNITY_ID = 1L;
     private static final String CALLER_IDENTITY = "22222222-2222-2222-2222-222222222222";
@@ -45,10 +50,16 @@ class ExpenseServiceTest {
         setField(communityService, "communityRepository", communityRepository);
         setField(communityService, "communityMemberRepository", communityMemberRepository);
 
+        VendorService vendorService = new VendorService();
+        setField(vendorService, "vendorRepository", vendorRepository);
+        setField(vendorService, "communityRepository", communityRepository);
+        setField(vendorService, "communityService", communityService);
+
         ExpenseService service = new ExpenseService();
         setField(service, "expenseRepository", expenseRepository);
         setField(service, "communityRepository", communityRepository);
         setField(service, "communityService", communityService);
+        setField(service, "vendorService", vendorService);
         return service;
     }
 
@@ -219,5 +230,95 @@ class ExpenseServiceTest {
         assertThatThrownBy(() -> service.deleteExpense(COMMUNITY_ID, 10L, CALLER_IDENTITY))
                 .isInstanceOf(AccessDeniedException.class);
         verify(expenseRepository, never()).delete(any());
+    }
+
+    private Vendor vendor(Long id, boolean active) {
+        Vendor vendor = new Vendor();
+        vendor.setId(id);
+        vendor.setCommunity(community(COMMUNITY_ID));
+        vendor.setName("Acme Electricals");
+        vendor.setServiceType("Electrical");
+        vendor.setActive(active);
+        return vendor;
+    }
+
+    @Test
+    void createExpense_linksVendor_whenVendorIdProvided() {
+        ExpenseService service = buildService();
+        CommunityMember admin = member(5L, CommunityRole.ADMIN);
+        when(communityRepository.existsById(COMMUNITY_ID)).thenReturn(true);
+        when(communityMemberRepository.findByCommunity_IdAndIdentityIdAndStatus(COMMUNITY_ID, CALLER_IDENTITY, MemberStatus.ACTIVE))
+                .thenReturn(Optional.of(admin));
+        when(vendorRepository.findByIdAndCommunity_Id(20L, COMMUNITY_ID)).thenReturn(Optional.of(vendor(20L, true)));
+        when(communityRepository.getReferenceById(COMMUNITY_ID)).thenReturn(community(COMMUNITY_ID));
+        when(expenseRepository.save(any(Expense.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ExpenseRequest request = expenseRequest();
+        request.setVendorId(20L);
+
+        ExpenseResponse response = service.createExpense(COMMUNITY_ID, request, CALLER_IDENTITY);
+
+        assertThat(response.getVendorId()).isEqualTo(20L);
+        assertThat(response.getVendorName()).isEqualTo("Acme Electricals");
+    }
+
+    @Test
+    void createExpense_throwsConflict_whenVendorInactive() {
+        ExpenseService service = buildService();
+        CommunityMember admin = member(5L, CommunityRole.ADMIN);
+        when(communityRepository.existsById(COMMUNITY_ID)).thenReturn(true);
+        when(communityMemberRepository.findByCommunity_IdAndIdentityIdAndStatus(COMMUNITY_ID, CALLER_IDENTITY, MemberStatus.ACTIVE))
+                .thenReturn(Optional.of(admin));
+        when(vendorRepository.findByIdAndCommunity_Id(20L, COMMUNITY_ID)).thenReturn(Optional.of(vendor(20L, false)));
+
+        ExpenseRequest request = expenseRequest();
+        request.setVendorId(20L);
+
+        assertThatThrownBy(() -> service.createExpense(COMMUNITY_ID, request, CALLER_IDENTITY))
+                .isInstanceOf(ResponseStatusException.class);
+        verify(expenseRepository, never()).save(any());
+    }
+
+    @Test
+    void createExpense_throwsNotFound_whenVendorIdInvalid() {
+        ExpenseService service = buildService();
+        CommunityMember admin = member(5L, CommunityRole.ADMIN);
+        when(communityRepository.existsById(COMMUNITY_ID)).thenReturn(true);
+        when(communityMemberRepository.findByCommunity_IdAndIdentityIdAndStatus(COMMUNITY_ID, CALLER_IDENTITY, MemberStatus.ACTIVE))
+                .thenReturn(Optional.of(admin));
+        when(vendorRepository.findByIdAndCommunity_Id(999L, COMMUNITY_ID)).thenReturn(Optional.empty());
+
+        ExpenseRequest request = expenseRequest();
+        request.setVendorId(999L);
+
+        assertThatThrownBy(() -> service.createExpense(COMMUNITY_ID, request, CALLER_IDENTITY))
+                .isInstanceOf(ResourceNotFoundException.class);
+        verify(expenseRepository, never()).save(any());
+    }
+
+    @Test
+    void listExpensesForVendor_returnsVendorsExpenses() {
+        ExpenseService service = buildService();
+        CommunityMember admin = member(5L, CommunityRole.ADMIN);
+        when(communityRepository.existsById(COMMUNITY_ID)).thenReturn(true);
+        when(communityMemberRepository.findByCommunity_IdAndIdentityIdAndStatus(COMMUNITY_ID, CALLER_IDENTITY, MemberStatus.ACTIVE))
+                .thenReturn(Optional.of(admin));
+        when(vendorRepository.findByIdAndCommunity_Id(20L, COMMUNITY_ID)).thenReturn(Optional.of(vendor(20L, true)));
+
+        Expense expense = new Expense();
+        expense.setId(10L);
+        expense.setCommunity(community(COMMUNITY_ID));
+        expense.setCategory("Maintenance");
+        expense.setDescription("Rewiring");
+        expense.setAmount(new BigDecimal("5000.00"));
+        expense.setExpenseDate(LocalDate.now());
+        expense.setCreatedByMember(admin);
+        expense.setVendor(vendor(20L, true));
+        when(expenseRepository.findByVendor_IdOrderByExpenseDateDescCreatedAtDesc(20L)).thenReturn(List.of(expense));
+
+        List<ExpenseResponse> result = service.listExpensesForVendor(COMMUNITY_ID, 20L, CALLER_IDENTITY);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getVendorId()).isEqualTo(20L);
     }
 }

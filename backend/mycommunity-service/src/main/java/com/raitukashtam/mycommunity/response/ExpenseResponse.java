@@ -21,4 +21,6 @@ public class ExpenseResponse {
     private Long createdByMemberId;
     private String createdByName;
     private LocalDateTime createdAt;
+    private Long vendorId;
+    private String vendorName;
 }

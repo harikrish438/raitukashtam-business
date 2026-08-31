@@ -40,9 +40,12 @@ convention) — this file only covers what's specific to `mycommunity-service`.
   `payment` table (Phase 4); `V6` added the `expense` table (Phase 5);
   `V7` added the `visitor` table (Phase 7); `V8` added the `amenity` and
   `amenity_booking` tables (Phase 8); `V9` added the `complaint` and
-  `complaint_comment` tables (Phase 9). Phase 6 (Dashboard aggregation)
-  added no migration — it's a pure read-model over existing tables, no
-  new schema. See auth-service's own
+  `complaint_comment` tables (Phase 9); `V10` added the `staff`,
+  `staff_attendance`, and `vendor` tables plus a nullable `vendor_id` FK
+  on the existing `expense` table (Phase 10) — the first migration to
+  alter a pre-existing table's schema since `V2`. Phase 6 (Dashboard
+  aggregation) added no migration — it's a pure read-model over existing
+  tables, no new schema. See auth-service's own
   Flyway convention (`baseline-on-migrate`/`baseline-version` in
   `application.yml`) — this service now follows the same pattern.
 
@@ -193,6 +196,31 @@ earlier.
   package-private, reused rather than duplicated — same convention as
   `BillService.requireBill`/`AnnouncementService.toResponse`/
   `AmenityService.requireAmenity` earlier).
+- **Staff** (Phase 10, new 2026-08-31): community (FK), name, role (enum
+  `SECURITY`/`HOUSEKEEPING`/`MAINTENANCE`/`OTHER`), phoneNumber
+  (optional), active (boolean). **ADMIN-only end to end** — no app
+  screen drives this yet, same precedent as Expense. Soft-deactivate
+  only (`PATCH .../staff/{id}/deactivate`), no hard delete — attendance
+  history references it.
+- **StaffAttendance** (Phase 10, new 2026-08-31): community (FK), staff
+  (FK), attendanceDate, status (enum `PRESENT`/`ABSENT`/`HALF_DAY`/
+  `ON_LEAVE`), markedBy (FK → `CommunityMember`). `POST .../staff/{id}/
+  attendance` is an **upsert**, not a duplicate-rejecting create — a
+  second call for the same staff+date corrects the earlier entry (unlike
+  e.g. Bill generation) since attendance mis-entry is a real, common
+  correction need. Unique on (staff, attendanceDate).
+- **Vendor** (Phase 10, new 2026-08-31): community (FK), name,
+  serviceType (free text, same open-ended reasoning as
+  `Expense.category`), contactPerson (optional), phoneNumber (optional),
+  active (boolean). ADMIN-only, soft-deactivate only, same pattern as
+  Staff. **"Vendor payments" is not a new entity** — `Expense` gained a
+  nullable `vendor` FK instead (`ExpenseRequest.vendorId`,
+  `ExpenseResponse.vendorId`/`vendorName`); an expense linked to a
+  vendor *is* a vendor payment. Rejected 400/404/409 the same way
+  Amenity booking validates its amenity: vendor must exist in this
+  community and be active, else the expense create fails.
+  `GET .../vendors/{id}/expenses` lists a vendor's payment history by
+  reusing `ExpenseRepository` rather than a new query surface.
 
 Endpoints (`/api/v1/communities`, all require a Bearer JWT):
 
@@ -252,10 +280,21 @@ Endpoints (`/api/v1/communities`, all require a Bearer JWT):
 | PATCH | `/api/v1/communities/{id}/complaints/{complaintId}/status` | Caller must be an ACTIVE ADMIN; 409 unless advancing exactly one step |
 | POST | `/api/v1/communities/{id}/complaints/{complaintId}/comments` | Caller must be an ACTIVE ADMIN, the raiser, or the current assignee |
 | GET | `/api/v1/communities/{id}/complaints/{complaintId}/comments` | Caller must be an ACTIVE ADMIN, the raiser, or the current assignee |
+| POST | `/api/v1/communities/{id}/staff` | Caller must be an ACTIVE ADMIN |
+| GET | `/api/v1/communities/{id}/staff` | Caller must be an ACTIVE ADMIN |
+| GET | `/api/v1/communities/{id}/staff/{staffId}` | Caller must be an ACTIVE ADMIN |
+| PATCH | `/api/v1/communities/{id}/staff/{staffId}/deactivate` | Caller must be an ACTIVE ADMIN; 409 if already inactive |
+| POST | `/api/v1/communities/{id}/staff/{staffId}/attendance` | Caller must be an ACTIVE ADMIN; upsert (corrects an existing entry for that date rather than rejecting it) |
+| GET | `/api/v1/communities/{id}/staff/{staffId}/attendance` | Caller must be an ACTIVE ADMIN; newest date first |
+| POST | `/api/v1/communities/{id}/vendors` | Caller must be an ACTIVE ADMIN |
+| GET | `/api/v1/communities/{id}/vendors` | Caller must be an ACTIVE ADMIN |
+| GET | `/api/v1/communities/{id}/vendors/{vendorId}` | Caller must be an ACTIVE ADMIN |
+| PATCH | `/api/v1/communities/{id}/vendors/{vendorId}/deactivate` | Caller must be an ACTIVE ADMIN; 409 if already inactive |
+| GET | `/api/v1/communities/{id}/vendors/{vendorId}/expenses` | Caller must be an ACTIVE ADMIN; that vendor's linked expenses ("vendor payments") |
 
-A 13-phase roadmap for the remaining feature areas (staff/vendor,
-documents, structured units, committee/RWA, push notification delivery)
-was agreed with the user — see repo-root
+A 13-phase roadmap for the remaining feature areas (documents,
+structured units, committee/RWA, push notification delivery) was agreed
+with the user — see repo-root
 `PROGRESS.md`'s 2026-08-31 session entry (5). The original full data
 model sketch for these is in `~/.claude/plans/validated-rolling-pizza.md`
 (from the session Phase 1 was planned in) or ask for it if that file
