@@ -42,7 +42,12 @@ auth-service also gained a self-service `PATCH /users/me` (firstName/
 lastName/email, partial update) — the account-level counterpart to
 mycommunity-service's own member-profile update, closing a gap surfaced
 by the `mysociety` app's bottom-nav "Profile" tab — see the 2026-08-31
-session entry (3).
+session entry (3). auth-service's `SecurityConfig` was then flipped from
+"public by default, list what needs auth" to "deny by default, list
+what's public" (matching mycommunity-service's own model) — the previous
+shape is exactly why `PATCH /users/me` needed a manual fix in the first
+place, and it could have happened again with any future endpoint — see
+the 2026-08-31 session entry (4).
 
 ## Open items / next steps
 
@@ -105,6 +110,44 @@ session entry (3).
   accepted v1 limitation in the implementation plan, not solved.
 
 ## Sessions
+
+### 2026-08-31 (4)
+
+- **Audited every endpoint in auth-service against `SecurityConfig`**,
+  prompted by the user asking "is authentication in place for every
+  request?" after session (3)'s `PATCH /users/me` gap. Listed all ~24
+  endpoints across every controller (`ClientController`,
+  `ForgotPasswordController`, `GoogleController`, `HelloController`,
+  `LoginPageController`, `OtpController`, `PinController`,
+  `ProductController`, `RoleController`, `UserController`) and matched
+  each against every matcher — confirmed everything currently public is
+  intentionally so per its own `@Operation` doc ("Public, unauthenticated"
+  on register/OTP/pin-login/Google/forgot-reset-password), and everything
+  else has an explicit `authenticated()`/`hasRole()` matcher. No other
+  live gap found.
+  - But the model itself was the actual risk: `SecurityConfig` ended in
+    `.requestMatchers("/**").permitAll()` *before* `.anyRequest()
+    .authenticated()`, making that last line dead code — "public by
+    default, list what needs auth" — the exact shape that let
+    `PATCH /users/me` slip through unnoticed in the first place, and
+    could silently repeat for any future endpoint someone forgets to gate.
+    `mycommunity-service`'s own `SecurityConfig` already does the
+    opposite (`anyRequest().authenticated()` as the real last rule, only
+    `/actuator/**`+`/health`+`/error` permitted).
+  - Flipped auth-service to match: removed the `/**` catch-all, replaced
+    it with explicit `permitAll()` entries for exactly the endpoints
+    confirmed genuinely public above (plus `/error`, previously covered
+    implicitly by the same catch-all — `mycommunity-service` already
+    permits this explicitly too), and let `.anyRequest().authenticated()`
+    become the real, reachable default.
+  - Full suite still 104/104 passing after the flip (nothing that should
+    be public got accidentally locked out). **Verified live** against the
+    rebuilt dev container: `GET /hello` (a trivial `@Hidden` smoke-test
+    endpoint literally named "Hello, secured world!" — ironically public
+    before this fix) now correctly `401`s; `POST /otp/generate` still
+    `200`s; `GET /users/me` still `401`s with no token; `POST
+    /users/register` with an empty body still reaches validation (`400`,
+    not `401`).
 
 ### 2026-08-31 (3)
 

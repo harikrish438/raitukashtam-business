@@ -97,9 +97,24 @@ public class SecurityConfig {
         http.csrf(AbstractHttpConfigurer::disable)
                 .cors(cors -> cors.configurationSource(corsConfigurationSource))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/actuator/**").permitAll()
+                        // Deny-by-default: everything is .anyRequest().authenticated() at the
+                        // bottom unless explicitly permitAll()'d here. Every permitAll() below is
+                        // an endpoint that's public *because* the caller has no token yet (login/
+                        // registration/OTP/PIN-login/Google/forgot-password) -- not a general
+                        // "public API" concept. A previous version of this chain ended in a
+                        // catch-all .requestMatchers("/**").permitAll() before this same
+                        // .anyRequest().authenticated(), which made that last line dead code and
+                        // meant a forgotten endpoint silently became public instead of failing
+                        // closed -- exactly what happened with PATCH /users/me (caught and fixed
+                        // 2026-08-31, then this whole chain flipped the same day).
+                        .requestMatchers("/actuator/**", "/error").permitAll()
                         .requestMatchers("/login").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/users/register").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/otp/generate", "/otp/verify", "/otp/login").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/pin/login").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/google/verify-token").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/forgot-password", "/reset-password").permitAll()
                         .requestMatchers(HttpMethod.GET, "/users").hasRole("PLATFORM_ADMIN")
                         .requestMatchers(HttpMethod.GET, "/users/*").authenticated()
                         .requestMatchers(HttpMethod.PATCH, "/users/me").authenticated()
@@ -109,7 +124,6 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/pin/register").authenticated()
                         .requestMatchers(HttpMethod.GET, "/pin/devices").authenticated()
                         .requestMatchers(HttpMethod.DELETE, "/pin/devices/*").authenticated()
-                        .requestMatchers("/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 // Bearer-token endpoints stay effectively stateless, but the
