@@ -6,8 +6,6 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 
-import java.util.UUID;
-
 @Getter
 public class RegisterRequest {
     @NotBlank(message = "Email is required")
@@ -31,5 +29,4 @@ public class RegisterRequest {
             message = "Mobile number must be exactly 10 digits"
     )
     private String mobileNumber;
-    private String modifiedBy;
 }

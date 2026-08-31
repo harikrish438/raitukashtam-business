@@ -5,5 +5,6 @@ public enum CredentialType {
     GOOGLE,
     APPLE,
     PASSKEY,
-    OTP_PHONE
+    OTP_PHONE,
+    DEVICE_PIN
 }

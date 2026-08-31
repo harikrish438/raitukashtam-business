@@ -186,6 +186,25 @@ public class UserService {
         return toUserResponse(user);
     }
 
+    /**
+     * Admin-triggered revocation of one of a user's DEVICE_PIN credentials --
+     * the "kill a lost phone's access centrally" capability, independent of
+     * whether the device itself is reachable. Guarded at the endpoint level
+     * (hasRole("PLATFORM_ADMIN")), same as setPlatformAdmin above.
+     */
+    @Transactional
+    public void revokePinDevice(Long userId, String deviceId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
+
+        IdentityCredential credential = identityCredentialRepository
+                .findByCredentialTypeAndExternalSubject(CredentialType.DEVICE_PIN, deviceId)
+                .filter(c -> c.getIdentity().getId().equals(user.getIdentity().getId()))
+                .orElseThrow(() -> new ResourceNotFoundException("No such device for this user"));
+
+        identityCredentialRepository.delete(credential);
+    }
+
     @Transactional(readOnly = true)
     public UserResponse getUserById(Long userId) {
         User user = userRepository.findById(userId)

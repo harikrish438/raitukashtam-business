@@ -44,7 +44,7 @@ public class ClientService {
     private final PasswordEncoder passwordEncoder;
 
     @Transactional
-    public ClientResponse createClient(String productCode, ClientRequest request) {
+    public ClientResponse createClient(String productCode, ClientRequest request, String createdBy) {
         Product product = productRepository.findByCode(productCode)
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found with code: " + productCode));
 
@@ -67,6 +67,7 @@ public class ClientService {
         client.setProduct(product);
         client.setClientId(request.getClientId());
         client.setClientType(request.getClientType());
+        client.setCreatedBy(createdBy);
         client.setAccessTokenTtlSeconds(
                 request.getAccessTokenTtlSeconds() != null ? request.getAccessTokenTtlSeconds() : DEFAULT_ACCESS_TOKEN_TTL_SECONDS);
         client.setRefreshTokenTtlSeconds(

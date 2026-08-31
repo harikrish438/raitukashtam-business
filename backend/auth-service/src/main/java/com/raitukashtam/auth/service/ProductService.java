@@ -21,7 +21,7 @@ public class ProductService {
     private final ModelMapper modelMapper;
 
     @Transactional
-    public ProductResponse createProduct(ProductRequest request) {
+    public ProductResponse createProduct(ProductRequest request, String createdBy) {
         if (productRepository.existsByCode(request.getCode())) {
             throw new ResourceAlreadyExistsException("Product with code " + request.getCode() + " already exists");
         }
@@ -30,6 +30,7 @@ public class ProductService {
         product.setCode(request.getCode());
         product.setName(request.getName());
         product.setStatus(ProductStatus.ACTIVE);
+        product.setCreatedBy(createdBy);
 
         Product saved = productRepository.save(product);
         return modelMapper.map(saved, ProductResponse.class);

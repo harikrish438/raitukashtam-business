@@ -53,6 +53,16 @@ alone still needs a restart (a fresh environment has no admin token yet
 to call anything with) — that's the one genuine chicken-and-egg case
 here, not something an API can route around.
 
+`raitukashtam@gmail.com` is the standing convention for this first
+`PLATFORM_ADMIN` in every environment (dev/test/prod) — same account
+`MAIL_USERNAME` already sends mail from. All three `.env*.example` files
+default `PLATFORM_ADMIN_EMAIL` to it. This is just which email gets
+promoted first, not a secret — additional platform admins can be added
+any time afterward via `PATCH /users/{id}/platform-admin`, which any
+existing platform admin can call (no restart needed for admin #2+, and
+`is_platform_admin` has no uniqueness constraint — multiple platform
+admins are fully supported).
+
 **Onboarding a product (repeat any time, no restart, no deploy):**
 1. Log in as the platform admin through the normal Authorization Code +
    PKCE flow (`GET /oauth2/authorize` → `/login` → `POST /oauth2/token`)

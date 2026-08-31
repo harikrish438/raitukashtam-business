@@ -20,7 +20,17 @@ auth-service now has everything needed for mobile OTP login on the
 backend side (`POST /otp/login`, `GET /users/me`) — what's left to make it
 usable end-to-end is client-side (the mobile app's own PKCE networking
 code, which doesn't exist yet) plus wiring mycommunity-service to actually
-use it (see Open items).
+use it (see Open items). auth-service also now has a device-bound app-PIN
+login (`POST /pin/register`, `POST /pin/login`, `GET`/`DELETE
+/pin/devices`, admin `DELETE /users/{id}/pin-devices/{deviceId}`) so a
+mobile app can re-authenticate via a short PIN instead of repeating OTP
+every time, with the server (not the device) able to revoke a specific
+lost/stolen device's access centrally — see the 2026-08-30 session entry.
+Verified live end-to-end against the running dev container, including the
+per-device lockout; not yet used by the (still nonexistent) mobile app
+networking code. `POST /otp/login` for `MYCOMMUNITY` (broken since the
+2026-08-30 DB reset) is fixed and live-verified with a real SMS OTP — see
+the 2026-08-31 session entry.
 
 ## Open items / next steps
 
@@ -54,8 +64,191 @@ use it (see Open items).
 - Production secrets (`.env.prod` values, real JWT signing keypair, Vault
   token, DB passwords) haven't been generated yet — `.env.prod.example`
   files only have placeholders.
+- **`MYCOMMUNITY` re-onboarding after the 2026-08-30 DB reset is now
+  functionally complete**: product, `mycommunity-android` client, and
+  `CONSUMER`+`SUPPORT` roles all recreated — `POST /otp/login` for
+  MyCommunity was broken (missing `CONSUMER` role → 404) and is now fixed
+  and live-verified end-to-end, see the 2026-08-31 session entry.
+  `SUPPORT` still isn't checked for anything in `mycommunity-service`
+  (which never reads the JWT `roles` claim at all today) — that remains
+  true and unchanged, just no longer blocking basic login.
+- The mobile app still has no networking code (see above) to actually use
+  the new device-PIN login — this session only built and live-verified
+  the backend side.
+- `DELETE /users/{id}/pin-devices/{deviceId}` (admin PIN revoke)'s
+  authorization gating (`hasRole("PLATFORM_ADMIN")`) is verified by the
+  automated integration test suite only, not live against the dev
+  container — doing so would've needed `raitukashtam@gmail.com`'s
+  password, which isn't recorded anywhere (by design, see 2026-08-29
+  session).
+- No "freshness" check on `POST /pin/register` — any valid Bearer token,
+  however obtained, can register a device's PIN. Documented as an
+  accepted v1 limitation in the implementation plan, not solved.
 
 ## Sessions
+
+### 2026-08-31
+
+- **Fixed the broken `MYCOMMUNITY` `POST /otp/login`** flagged as an open
+  item after the 2026-08-30 DB reset: the product had zero roles, so
+  `RoleService.assignDefaultRole` 404'd on every OTP signup. Recreated the
+  `CONSUMER` role (`POST /products/MYCOMMUNITY/roles` →
+  `{"code":"CONSUMER","name":"Consumer"}`) using a real platform-admin
+  Bearer token obtained by driving the actual Postman collection's
+  `0. OAuth2 Login (PKCE)` folder headlessly via `newman` (hand-rolling the
+  same PKCE dance with raw curl/openssl hit a `invalid_grant` — the
+  collection's proven CryptoJS-based verifier/challenge logic worked on
+  the first try, so used that instead of debugging the curl version
+  further). Confirmed in the DB afterward: `MYCOMMUNITY` now has both
+  `CONSUMER` (id 8) and `SUPPORT` (id 7, from 2026-08-30).
+- **Live-verified the fix end-to-end**, not just via the DB check: dev's
+  `TWOFACTOR_API_KEY` turned out to still be the placeholder
+  `dev-2factor-key` (`OTPService`'s own code comment already flagged this
+  — the real key had been rotated out of caution and never replaced), so
+  `POST /otp/generate` 500'd with `Invalid API Key` on the first attempt.
+  User supplied a real 2Factor.in API key; updated the repo-root `.env`
+  (gitignored, not committed), force-recreated `vault-init` to reseed
+  `secret/auth-service` with it (a plain restart doesn't re-run
+  `vault-init`, per the 2026-08-28 session's own finding), then restarted
+  `auth-service` to pick it up from Vault. With a real key in place, sent
+  a real OTP by SMS to a test number, then called `POST /otp/login` with
+  the received code: `200 OK` with a real session cookie, no 404. Confirmed
+  in the DB: a `product_membership` row for `MYCOMMUNITY` (id 4, `ACTIVE`)
+  with a `role_assignment` → `CONSUMER`.
+- Explained to the user, grounded in the actual code
+  (`OtpController`/`RoleService`/`OAuth2TokenClaimsCustomizer`), what role
+  `/otp/login` actually uses `CONSUMER` for: purely to satisfy
+  `assignDefaultRole`'s lookup so membership creation doesn't 404 — the
+  session `/otp/login` establishes uses a hardcoded `ROLE_USER` authority,
+  unrelated to it. The `CONSUMER` role only actually appears anywhere
+  externally-visible later, in the JWT's `roles` claim, when the client
+  continues to `/oauth2/token` — and since `mycommunity-service` doesn't
+  read that claim today (established 2026-08-30), it currently has zero
+  effect on authorization, matching what was already documented.
+
+### 2026-08-30
+
+- **Established `raitukashtam@gmail.com` as the standing convention for
+  the first `PLATFORM_ADMIN` in every environment** (dev/test/prod) — same
+  account `MAIL_USERNAME` already sends mail from. Updated all three
+  `.env*.example` files, the real dev `.env`, and `backend/auth-service/
+  CLAUDE.md` to default `PLATFORM_ADMIN_EMAIL` to it. Also documented (and
+  live-verified) that multiple platform admins are fully supported —
+  `identity.is_platform_admin` is a plain boolean with no uniqueness
+  constraint, and `PATCH /users/{id}/platform-admin` (existing-admin-gated)
+  is the normal way to add admin #2+, distinct from the restart-based
+  bootstrap needed only for admin #1 in a fresh environment.
+- **Found and fixed a real bug while building a Postman collection for
+  auth-service**: `RegisterRequest.modifiedBy` was accepted as public,
+  unauthenticated input on `POST /users/register` but silently discarded
+  — `UserController`/`UserService.registerUser` never read it, and
+  `createdBy` was already correctly server-derived from the registering
+  user's own email. Removed the dead field (and an unrelated unused `UUID`
+  import in the same file).
+- **Generated a Postman collection for auth-service** from its live
+  OpenAPI spec (`GET /v3/api-docs`), saved to `backend/auth-service/
+  postman/auth-service.postman_collection.json`. Added a hand-built
+  `0. OAuth2 Login (PKCE)` folder (4 chained requests with pre-request/
+  test scripts) driving the real Authorization Code + PKCE flow, since
+  Spring Authorization Server's framework-provided routes
+  (`/oauth2/authorize`, `/login`, `/oauth2/token`) have no OpenAPI
+  annotations and were missing from the auto-generated part.
+- **Did a full local DB reset of `auth-service` only** (`docker compose
+  down` + `docker volume rm auth-service_auth-pgdata` + `up -d`), at the
+  user's request, to test the platform-admin bootstrap flow from a
+  genuinely fresh environment. Confirmed all 12 (at the time) migrations
+  reapply cleanly and `PlatformAdminSeeder` behaves exactly as documented
+  on a truly empty `identity` table. Left `mycommunity-service`/`redis`/
+  `vault` untouched. (Noted a stray leftover volume,
+  `auth-service_pgdata` — no `auth-` prefix on `pgdata` — from before a
+  past rename; not the one actually mounted, left alone.)
+- **Saved a growing operational runbook outside the git repo**, in this
+  session's Claude memory directory (`runbook_postman_admin_onboarding.md`,
+  indexed in `MEMORY.md`) — click-by-click Postman procedures (onboarding
+  a second platform admin, bootstrapping the first one, the full DB reset
+  above) — deliberately not committed, since it's personal
+  testing/operational instructions rather than project documentation.
+- **Designed and built device-bound app-PIN login** ("Path B" from a
+  design discussion about persisted mobile sessions — see the plan at
+  `~/.claude/plans/tidy-greeting-lovelace.md`), so a mobile app whose only
+  login method is OTP can re-authenticate via a short PIN afterward
+  instead of repeating OTP every time, with the *server* (not the device)
+  able to kill a specific lost/stolen device's access centrally:
+  - New `CredentialType.DEVICE_PIN`, reusing `IdentityCredential`'s
+    existing `externalSubject` (device id) and `passwordHash` (bcrypt PIN
+    hash) columns — same shape `OTP_PHONE` already uses, no new table.
+    Migration `V13__add_device_pin_credential_type.sql` widens
+    `identity_credential`'s CHECK constraint (found by reading
+    `V1__baseline_schema.sql` directly, not assumed from the Java enum
+    mapping alone — the constraint would have rejected the new value
+    otherwise).
+  - New `PinController`: `POST /pin/register` (Bearer-authenticated,
+    upserts a device's PIN — changing an existing device's PIN is just a
+    re-register, a `deviceId` already owned by a *different* identity is
+    a 409), `POST /pin/login` (public, mirrors `OtpController.
+    loginWithOtp`'s exact session-authentication mechanism so the caller
+    continues through the normal `/oauth2/authorize` PKCE flow
+    afterward), `GET /pin/devices` + `DELETE /pin/devices/{deviceId}`
+    (self-service list/revoke).
+  - New `PinAttemptService` — Redis-backed per-device lockout (5 wrong
+    PINs → 15 min lockout, `PinSecurityConfig`), separate from
+    `RateLimiterService`'s existing per-IP request-volume limiting (both
+    apply to `/pin/login`).
+  - New admin endpoint on `UserController`,
+    `DELETE /users/{id}/pin-devices/{deviceId}` (`PLATFORM_ADMIN`-gated)
+    — the actual "kill a lost device centrally" capability that motivated
+    choosing this design over a purely client-side PIN gate.
+  - 14 new tests (`PinControllerApiTest`, mirroring `OtpControllerApiTest`/
+    `UserControllerApiTest`'s existing patterns) — full suite now 99/99
+    passing (was 85).
+  - **Verified live end-to-end against the running dev container**, not
+    just the test suite: registered a real user, password+PKCE login for
+    a real access token, registered a device PIN with it, then — in a
+    completely fresh cookie session with no prior authentication at all —
+    logged in with just `deviceId`+`pin`, got a real session cookie back,
+    and continued through `/oauth2/authorize`/`/oauth2/token` to a brand
+    new access token, never re-entering the password. Also live-verified
+    the 5-attempt lockout (6th wrong PIN, and even the correct PIN
+    afterward, both 429 until the lockout window passes). Admin-revoke
+    authorization was verified by the automated test suite only, not live
+    (see Open items).
+- **Found and fixed a real gap in the Platform Admin API's audit
+  trail**: `POST /products`, `POST /products/{code}/roles`, and
+  `POST /products/{code}/clients` all created rows with `created_by`/
+  `modified_by` left `NULL`, regardless of who actually called them —
+  none of `ProductController`/`RoleController`/`ClientController` even
+  received the caller's `Jwt`, and none of `ProductService.createProduct`/
+  `RoleService.createRole`/`ClientService.createClient` ever called
+  `setCreatedBy`. User noticed by inspecting the DB after onboarding
+  `MYCOMMUNITY` manually. Fixed by threading
+  `@AuthenticationPrincipal Jwt jwt` through all three controllers,
+  resolving it to the calling admin's **email** (via
+  `IdentityRepository.findById(UUID.fromString(jwt.getSubject()))
+  .getPrimaryEmail()`, falling back to the raw UUID if that somehow
+  fails) rather than storing the raw UUID — matching the existing
+  convention every self-service flow already uses (`UserService.
+  registerUser` et al. store the registering email, not a UUID). Note
+  this only changes the audit column; the JWT's own `sub` claim is
+  unrelated and unchanged. `modified_by` staying `NULL` on create is
+  separately confirmed to be consistent with the rest of the codebase —
+  `setModifiedBy` is never called anywhere in this repo, for any entity,
+  including the one real update endpoint that exists
+  (`PATCH /users/{id}/platform-admin`) — not a Product-specific gap.
+  Full suite still 99/99 after the fix; redeployed to the dev container
+  and confirmed live.
+- Deep-dived OAuth2 Authorization Code + PKCE mechanics end-to-end with
+  the user (what each of the 4 Postman requests actually does, access/
+  refresh token lifetimes, why public clients never get a refresh token,
+  HTTP-session vs JWT distinctions, browser/mobile SSO), and the actual
+  (lack of) responsibilities of an auth-service product-level `Role` —
+  confirmed `mycommunity-service` never reads the JWT's `roles` claim at
+  all, so today a product role like `MYCOMMUNITY`'s `CONSUMER` has zero
+  functional effect on `mycommunity-service` behavior; its only real
+  function is satisfying `RoleService.assignDefaultRole` so signup
+  doesn't 404. See the auto-memory files this session added for how the
+  user prefers to work through this material (hands-on, one product at a
+  time) — not duplicated here since PROGRESS.md tracks project state, not
+  collaboration style.
 
 ### 2026-08-28
 

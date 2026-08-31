@@ -87,4 +87,16 @@ public class UserController {
                                                            @Valid @RequestBody PlatformAdminRequest request) {
         return ResponseEntity.ok(userService.setPlatformAdmin(userId, request.getPlatformAdmin()));
     }
+
+    @DeleteMapping("/{id}/pin-devices/{deviceId}")
+    @Tag(name = OpenApiConfig.TAG_PLATFORM_ADMIN)
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(summary = "Revoke a user's device PIN", description = "PLATFORM_ADMIN only. Kills a "
+            + "specific device's PIN login centrally (e.g. a lost/stolen phone), independent of "
+            + "whether the device itself is reachable.")
+    public ResponseEntity<Void> revokePinDevice(@PathVariable("id") Long userId,
+                                                 @PathVariable("deviceId") String deviceId) {
+        userService.revokePinDevice(userId, deviceId);
+        return ResponseEntity.noContent().build();
+    }
 }

@@ -54,7 +54,7 @@ public class RoleService {
     }
 
     @Transactional
-    public RoleResponse createRole(String productCode, RoleRequest request) {
+    public RoleResponse createRole(String productCode, RoleRequest request, String createdBy) {
         Product product = productRepository.findByCode(productCode)
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found with code: " + productCode));
 
@@ -67,6 +67,7 @@ public class RoleService {
         role.setProduct(product);
         role.setCode(request.getCode());
         role.setName(request.getName());
+        role.setCreatedBy(createdBy);
 
         Role saved = roleRepository.save(role);
         return toResponse(saved);
