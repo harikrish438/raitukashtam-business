@@ -12,6 +12,7 @@ import com.raitukashtam.mycommunity.response.AnnouncementResponse;
 import com.raitukashtam.mycommunity.response.BillResponse;
 import com.raitukashtam.mycommunity.response.CommunityMemberResponse;
 import com.raitukashtam.mycommunity.response.CommunityResponse;
+import com.raitukashtam.mycommunity.response.DashboardResponse;
 import com.raitukashtam.mycommunity.response.ExpenseResponse;
 import com.raitukashtam.mycommunity.response.JoinRequestResponse;
 import com.raitukashtam.mycommunity.response.MyCommunityResponse;
@@ -20,6 +21,7 @@ import com.raitukashtam.mycommunity.service.AnnouncementService;
 import com.raitukashtam.mycommunity.service.BillService;
 import com.raitukashtam.mycommunity.service.CommunityJoinRequestService;
 import com.raitukashtam.mycommunity.service.CommunityService;
+import com.raitukashtam.mycommunity.service.DashboardService;
 import com.raitukashtam.mycommunity.service.ExpenseService;
 import com.raitukashtam.mycommunity.service.PaymentService;
 import lombok.extern.slf4j.Slf4j;
@@ -54,6 +56,9 @@ public class CommunityController {
 
     @Autowired
     private ExpenseService expenseService;
+
+    @Autowired
+    private DashboardService dashboardService;
 
     @PostMapping
     public ResponseEntity<CommunityResponse> createCommunity(@RequestBody @Validated CommunityRequest request,
@@ -272,5 +277,12 @@ public class CommunityController {
         log.info("Inside deleteExpense method of CommunityController");
         expenseService.deleteExpense(communityId, expenseId, jwt.getSubject());
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{communityId}/dashboard")
+    public DashboardResponse getDashboard(@PathVariable("communityId") Long communityId,
+                                           @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside getDashboard method of CommunityController");
+        return dashboardService.getDashboard(communityId, jwt.getSubject());
     }
 }

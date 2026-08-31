@@ -38,9 +38,10 @@ convention) — this file only covers what's specific to `mycommunity-service`.
   `community_join_request` table; `V3` added the `announcement` table
   (Phase 2); `V4` added the `bill` table (Phase 3); `V5` added the
   `payment` table (Phase 4); `V6` added the `expense` table (Phase 5).
-  See auth-service's own Flyway convention (`baseline-on-migrate`/
-  `baseline-version` in `application.yml`) — this service now follows the
-  same pattern.
+  Phase 6 (Dashboard aggregation) added no migration — it's a pure
+  read-model over existing tables, no new schema. See auth-service's own
+  Flyway convention (`baseline-on-migrate`/`baseline-version` in
+  `application.yml`) — this service now follows the same pattern.
 
 ## Domain model (Phase 1, extended 2026-08-31 — registration, roles, join requests)
 
@@ -96,6 +97,27 @@ convention) — this file only covers what's specific to `mycommunity-service`.
   community as a whole, not an individual member), so there's no
   resident-facing read path at all, not even for their own reference.
 
+**Dashboard (Phase 6, new 2026-08-31)**: no new entity — a derived/union
+read-model over Community/CommunityMember/Bill/Payment/Expense/
+Announcement, computed on request rather than a separate activity-log or
+snapshot table (same "don't duplicate data that already exists elsewhere"
+reasoning the original data-model plan used). `GET .../dashboard` is
+**ADMIN-only**, matching every other financial-aggregate endpoint
+(`listBills`/`listPayments`/`listExpenses` "all" views). Returns:
+occupied/vacant units (from `CommunityMember` ACTIVE count vs
+`Community.totalUnits`), pending dues total (sum of `PENDING` bills, all
+periods), maintenance collected this calendar month (sum of `Payment`
+where `paidAt` falls in it — cash-flow view, not tied to the bill's
+`period`), this/last month expenses (sum of `Expense` by `expenseDate`),
+a running community balance (all-time payments minus all-time expenses),
+the 5 most recent announcements, and a merged/sorted "recent activity"
+feed (top 10 of Payment+Announcement combined, newest first — Visitor
+activity will join this union once that phase exists; fetching each
+source's own top 10 before merging guarantees the true top 10 overall is
+never missed). `AnnouncementService.toResponse` was made package-private
+for this phase to reuse, same pattern as `BillService.requireBill`
+earlier.
+
 Endpoints (`/api/v1/communities`, all require a Bearer JWT):
 
 | Method | Path | Auth rule |
@@ -128,10 +150,11 @@ Endpoints (`/api/v1/communities`, all require a Bearer JWT):
 | GET | `/api/v1/communities/{id}/expenses` | Caller must be an ACTIVE ADMIN; newest expenseDate first |
 | GET | `/api/v1/communities/{id}/expenses/{expenseId}` | Caller must be an ACTIVE ADMIN |
 | DELETE | `/api/v1/communities/{id}/expenses/{expenseId}` | Caller must be an ACTIVE ADMIN |
+| GET | `/api/v1/communities/{id}/dashboard` | Caller must be an ACTIVE ADMIN |
 
-A 13-phase roadmap for the remaining feature areas (dashboard
-aggregation, visitors, amenities, helpdesk, staff/vendor, documents,
-structured units, committee/RWA, push notification delivery) was agreed
+A 13-phase roadmap for the remaining feature areas (visitors, amenities,
+helpdesk, staff/vendor, documents, structured units, committee/RWA, push
+notification delivery) was agreed
 with the user — see repo-root
 `PROGRESS.md`'s 2026-08-31 session entry (5). The original full data
 model sketch for these is in `~/.claude/plans/validated-rolling-pizza.md`

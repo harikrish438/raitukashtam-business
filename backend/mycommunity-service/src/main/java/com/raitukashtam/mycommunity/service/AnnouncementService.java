@@ -72,7 +72,8 @@ public class AnnouncementService {
                 .orElseThrow(() -> new ResourceNotFoundException("Announcement not found with id: " + announcementId));
     }
 
-    private AnnouncementResponse toResponse(Announcement announcement) {
+    /** Package-private -- reused by DashboardService's Recent Announcements/Activity sections. */
+    AnnouncementResponse toResponse(Announcement announcement) {
         return new AnnouncementResponse(
                 announcement.getId(),
                 announcement.getCommunity().getId(),

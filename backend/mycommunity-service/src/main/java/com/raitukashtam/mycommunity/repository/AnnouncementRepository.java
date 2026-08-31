@@ -12,5 +12,7 @@ public interface AnnouncementRepository extends JpaRepository<Announcement, Long
 
     List<Announcement> findByCommunity_IdOrderByCreatedAtDesc(Long communityId);
 
+    List<Announcement> findTop10ByCommunity_IdOrderByCreatedAtDesc(Long communityId);
+
     Optional<Announcement> findByIdAndCommunity_Id(Long id, Long communityId);
 }

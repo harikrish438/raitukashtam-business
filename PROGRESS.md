@@ -51,7 +51,12 @@ caller existed yet). No payment gateway integration — still deliberately
 out of scope, see Open items — see the 2026-08-31 session entry (7). And
 **Phase 5 (Expenses)**: ADMIN-only end to end (create/list/get/delete,
 no resident visibility at all — expenses belong to the community, not an
-individual member) — see the 2026-08-31 session entry (8).
+individual member) — see the 2026-08-31 session entry (8). And
+**Phase 6 (Dashboard aggregation)**: `GET .../dashboard` (ADMIN-only), a
+derived read-model with no new table — occupancy, pending dues, this-
+month collection/expenses, running balance, recent announcements, and a
+merged/sorted Payment+Announcement activity feed — see the 2026-08-31
+session entry (9).
 auth-service also gained a self-service `PATCH /users/me` (firstName/
 lastName/email, partial update) — the account-level counterpart to
 mycommunity-service's own member-profile update, closing a gap surfaced
@@ -65,13 +70,14 @@ the 2026-08-31 session entry (4).
 
 ## Open items / next steps
 
-- Build the remaining `mycommunity-service` phases (dashboard
-  aggregation, visitors, amenities, then push-notification delivery once
-  the mobile app has real networking — see the full phased roadmap agreed
-  with the user in the 2026-08-31 session entry (5)). Announcements
-  (Phase 2), Maintenance & Billing generation+status (Phase 3), Payments
-  (Phase 4), and Expenses (Phase 5) are now done. Full data model for the
-  rest already designed, see the 2026-08-28 session entry below.
+- Build the remaining `mycommunity-service` phases (visitors, amenities,
+  then push-notification delivery once the mobile app has real
+  networking — see the full phased roadmap agreed with the user in the
+  2026-08-31 session entry (5)). Announcements (Phase 2), Maintenance &
+  Billing generation+status (Phase 3), Payments (Phase 4), Expenses
+  (Phase 5), and Dashboard aggregation (Phase 6) are now done. Full data
+  model for the rest already designed, see the 2026-08-28 session entry
+  below.
 - **Push notification delivery is explicitly out of scope for now** —
   discussed with the user when scoping Announcements: needs FCM
   integration, a device-token registration endpoint, and (blocking)
@@ -135,6 +141,70 @@ the 2026-08-31 session entry (4).
   accepted v1 limitation in the implementation plan, not solved.
 
 ## Sessions
+
+### 2026-08-31 (9)
+
+- **Built `mycommunity-service` Phase 6: Dashboard aggregation**,
+  completing the financial/activity slice of the roadmap from session
+  (5). No new table — a pure derived/union read-model over the five
+  entities built in sessions (1)-(8) (`Community`/`CommunityMember`/
+  `Bill`/`Payment`/`Expense`/`Announcement`), same "don't duplicate data
+  that already exists elsewhere" reasoning the original data-model plan
+  used for "Recent Activity."
+  - Added aggregate query methods to four existing repositories
+    (`BillRepository.sumAmountByCommunity_IdAndStatus`,
+    `PaymentRepository.sumAmountByCommunity_Id`/
+    `sumAmountByCommunity_IdAndPaidAtBetween`/`findTop10By...`,
+    `ExpenseRepository.sumAmountByCommunity_Id`/
+    `sumAmountByCommunity_IdAndExpenseDateBetween`,
+    `AnnouncementRepository.findTop10By...`,
+    `CommunityMemberRepository.countByCommunity_IdAndStatus`) — Spring
+    Data doesn't support a `sum` derived-query keyword, so those four
+    needed `@Query`; the rest are plain derived methods.
+  - `DashboardResponse`/`ActivityItemResponse`/`ActivityType` (new
+    `response`-package enum, not a persisted entity), `DashboardService`
+    (ADMIN-only, matching every other financial-aggregate endpoint —
+    `listBills`/`listPayments`/`listExpenses`'s "all" views), one new
+    endpoint (`GET .../dashboard`) on `CommunityController`.
+  - Recent Activity feed: fetches each source's own top 10
+    (Payment-by-`paidAt`, Announcement-by-`createdAt`) separately, merges,
+    sorts by timestamp descending in application code, takes the overall
+    top 10 — guarantees correctness (any true top-10 item must be in the
+    top 10 of its own source) without a database-level `UNION`. Designed
+    to extend to Visitor activity once that phase exists.
+    `AnnouncementService.toResponse` was made package-private for this
+    phase to reuse (same pattern as `BillService.requireBill` in
+    session (7)).
+  - "Maintenance collected this month" is a genuine cash-flow figure —
+    summed by `Payment.paidAt` falling in the current calendar month,
+    not by the `Bill.period` it happens to be paying (a September bill
+    paid in October counts toward October's collection). "Pending dues
+    total" is deliberately all-time/all-periods, not scoped to the
+    current month, matching how a real admin would read "how much is
+    still owed."
+  - 4 new unit tests (`DashboardServiceTest`) — all pass. Full suite:
+    54/54 across the seven service test classes; the one pre-existing
+    DB-dependent context test still needs a live Postgres.
+  - **Live-verified end-to-end** against the rebuilt dev container (no
+    migration to apply this phase — confirmed by re-checking
+    `flyway_schema_history`, still capped at `V6`). Reused community
+    id 2's full history across every prior session: the dashboard's
+    first fetch correctly showed `pendingDuesTotal: 0` (both existing
+    bills were already settled), the one real `Payment` row correctly
+    counted toward this month's collection while the *other* bill's
+    legacy mark-paid (no `Payment` row, from session (6) before Phase 4
+    replaced it) correctly did **not**, the one surviving `Expense`
+    (₹2,500, the other having been deleted during session (8)'s own
+    live-verify) appeared in `expensesThisMonth`, and the resulting
+    `communityBalance` (₹1,500 − ₹2,500 = −₹1,000) matched by hand.
+    Then added a fresh announcement and a second real payment (a new
+    October bill, generated and paid) and re-fetched: `pendingDuesTotal`
+    correctly picked up the new period's unpaid twin, `communityBalance`
+    updated to the correct new figure, and `recentActivity` returned the
+    three items in exactly the right newest-first order across mixed
+    types (Payment → Announcement → Payment) — confirming the merge/sort
+    logic against real multi-session data, not just fresh mocks.
+    Non-admin (resident) `GET .../dashboard` → 403; no token → 401.
 
 ### 2026-08-31 (8)
 
