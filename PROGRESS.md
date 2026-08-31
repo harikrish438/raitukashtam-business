@@ -56,7 +56,10 @@ individual member) — see the 2026-08-31 session entry (8). And
 derived read-model with no new table — occupancy, pending dues, this-
 month collection/expenses, running balance, recent announcements, and a
 merged/sorted Payment+Announcement activity feed — see the 2026-08-31
-session entry (9).
+session entry (9). And **Phase 7 (Visitors)**: any ACTIVE member logs/
+checks-in/checks-out their own visitors as host (pre-approval or
+walk-in), ADMIN sees/acts on all (standing in for a gate-guard role this
+system doesn't have) — see the 2026-08-31 session entry (10).
 auth-service also gained a self-service `PATCH /users/me` (firstName/
 lastName/email, partial update) — the account-level counterpart to
 mycommunity-service's own member-profile update, closing a gap surfaced
@@ -70,14 +73,15 @@ the 2026-08-31 session entry (4).
 
 ## Open items / next steps
 
-- Build the remaining `mycommunity-service` phases (visitors, amenities,
-  then push-notification delivery once the mobile app has real
-  networking — see the full phased roadmap agreed with the user in the
-  2026-08-31 session entry (5)). Announcements (Phase 2), Maintenance &
-  Billing generation+status (Phase 3), Payments (Phase 4), Expenses
-  (Phase 5), and Dashboard aggregation (Phase 6) are now done. Full data
-  model for the rest already designed, see the 2026-08-28 session entry
-  below.
+- Build the remaining `mycommunity-service` phases (amenities, helpdesk,
+  staff/vendor, documents, structured units, committee/RWA, then
+  push-notification delivery once the mobile app has real networking —
+  see the full phased roadmap agreed with the user in the 2026-08-31
+  session entry (5)). Announcements (Phase 2), Maintenance & Billing
+  generation+status (Phase 3), Payments (Phase 4), Expenses (Phase 5),
+  Dashboard aggregation (Phase 6), and Visitors (Phase 7) are now done.
+  Full data model for the rest already designed, see the 2026-08-28
+  session entry below.
 - **Push notification delivery is explicitly out of scope for now** —
   discussed with the user when scoping Announcements: needs FCM
   integration, a device-token registration endpoint, and (blocking)
@@ -141,6 +145,57 @@ the 2026-08-31 session entry (4).
   accepted v1 limitation in the implementation plan, not solved.
 
 ## Sessions
+
+### 2026-08-31 (10)
+
+- **Built `mycommunity-service` Phase 7: Visitors**, continuing the
+  roadmap from session (5). `Visitor` entity (community FK, host FK →
+  `CommunityMember`, guestName, type enum `GUEST`/`DELIVERY`/`STAFF`/
+  `OTHER`, optional purpose, status enum `EXPECTED`/`CHECKED_IN`/
+  `CHECKED_OUT`, entryTime, exitTime), `VisitorRepository`,
+  `CreateVisitorRequest`/`VisitorResponse`, `VisitorService`, six new
+  endpoints on `CommunityController`
+  (`POST`/`GET` list/`GET` mine/`GET` one/`POST check-in`/`POST
+  check-out` under `/api/v1/communities/{id}/visitors`),
+  `V7__visitor.sql`.
+  - **Different authorization shape from every prior phase**: the host
+    resident (any ACTIVE member) is the natural creator/actor here, not
+    the community admin — unlike Announcements/Bills/Expenses. `POST
+    .../visitors` supports both real-world flows in one call via a
+    `checkedInNow` flag: pre-approval (`EXPECTED`, no entryTime) when
+    false/omitted, or an already-arrived walk-in logged after the fact
+    (`CHECKED_IN`, entryTime=now) when true. `check-in`/`check-out`
+    (409 if called out of sequence) are callable by **either the host or
+    an ADMIN** — this system has no dedicated gate-guard role, so ADMIN
+    stands in for that at the gate. ADMIN sees every visitor
+    (`GET .../visitors`); a resident sees only their own hosted visitors
+    (`GET .../visitors/mine`) — same admin-sees-all/resident-sees-own
+    split as Bills/Payments.
+  - 11 new unit tests (`VisitorServiceTest`) — caught a real test-fixture
+    bug during the first run (3 tests NPE'd because they built a `Visitor`
+    without setting `community`, needed by `toResponse`) and fixed the
+    tests, not the service, since the omission was in test data, not
+    production logic. All pass after the fix. Full suite: 65/65 across
+    the eight service test classes; the one pre-existing DB-dependent
+    context test still needs a live Postgres.
+  - **Live-verified end-to-end** against the rebuilt dev container: `V7`
+    applied (`flyway_schema_history` confirms). Reused community id 2.
+    Confirmed: resident pre-approves a guest → `EXPECTED`, no entryTime;
+    admin logs a walk-in with `checkedInNow:true` → `CHECKED_IN`
+    immediately; admin (not the host) checks in the resident's expected
+    guest → 200, entryTime set (gate-guard-stand-in flow); checking in
+    again → 409; a *different* resident (neither host nor admin) tries
+    to check out someone else's visitor → 403; the actual host checks
+    out their own → 200, exitTime set; checking out again → 409; admin
+    `GET .../visitors` sees both, resident → 403; resident
+    `GET .../visitors/mine` scoped correctly; resident `GET` on their
+    own visitor → 200, on someone else's → 403; blank guestName /
+    invalid type enum → 400 both; nonexistent visitor id → 404; no
+    token → 401.
+  - Noted but deliberately not done this phase (scope discipline, not an
+    oversight): hooking a "Today's Visitors" count into Phase 6's
+    Dashboard would be a natural small follow-up now that `Visitor`
+    exists, but wasn't asked for and wasn't done.
 
 ### 2026-08-31 (9)
 

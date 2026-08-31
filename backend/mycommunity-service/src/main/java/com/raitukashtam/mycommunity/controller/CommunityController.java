@@ -3,6 +3,7 @@ package com.raitukashtam.mycommunity.controller;
 import com.raitukashtam.mycommunity.request.AnnouncementRequest;
 import com.raitukashtam.mycommunity.request.CommunityMemberRequest;
 import com.raitukashtam.mycommunity.request.CommunityRequest;
+import com.raitukashtam.mycommunity.request.CreateVisitorRequest;
 import com.raitukashtam.mycommunity.request.ExpenseRequest;
 import com.raitukashtam.mycommunity.request.GenerateBillsRequest;
 import com.raitukashtam.mycommunity.request.JoinRequestRequest;
@@ -17,6 +18,7 @@ import com.raitukashtam.mycommunity.response.ExpenseResponse;
 import com.raitukashtam.mycommunity.response.JoinRequestResponse;
 import com.raitukashtam.mycommunity.response.MyCommunityResponse;
 import com.raitukashtam.mycommunity.response.PaymentResponse;
+import com.raitukashtam.mycommunity.response.VisitorResponse;
 import com.raitukashtam.mycommunity.service.AnnouncementService;
 import com.raitukashtam.mycommunity.service.BillService;
 import com.raitukashtam.mycommunity.service.CommunityJoinRequestService;
@@ -24,6 +26,7 @@ import com.raitukashtam.mycommunity.service.CommunityService;
 import com.raitukashtam.mycommunity.service.DashboardService;
 import com.raitukashtam.mycommunity.service.ExpenseService;
 import com.raitukashtam.mycommunity.service.PaymentService;
+import com.raitukashtam.mycommunity.service.VisitorService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -59,6 +62,9 @@ public class CommunityController {
 
     @Autowired
     private DashboardService dashboardService;
+
+    @Autowired
+    private VisitorService visitorService;
 
     @PostMapping
     public ResponseEntity<CommunityResponse> createCommunity(@RequestBody @Validated CommunityRequest request,
@@ -284,5 +290,51 @@ public class CommunityController {
                                            @AuthenticationPrincipal Jwt jwt) {
         log.info("Inside getDashboard method of CommunityController");
         return dashboardService.getDashboard(communityId, jwt.getSubject());
+    }
+
+    @PostMapping("/{communityId}/visitors")
+    public ResponseEntity<VisitorResponse> createVisitor(@PathVariable("communityId") Long communityId,
+                                                           @RequestBody @Validated CreateVisitorRequest request,
+                                                           @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside createVisitor method of CommunityController");
+        return new ResponseEntity<>(visitorService.createVisitor(communityId, request, jwt.getSubject()), HttpStatus.CREATED);
+    }
+
+    @GetMapping("/{communityId}/visitors")
+    public List<VisitorResponse> listVisitors(@PathVariable("communityId") Long communityId,
+                                               @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside listVisitors method of CommunityController");
+        return visitorService.listVisitors(communityId, jwt.getSubject());
+    }
+
+    @GetMapping("/{communityId}/visitors/mine")
+    public List<VisitorResponse> listMyVisitors(@PathVariable("communityId") Long communityId,
+                                                 @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside listMyVisitors method of CommunityController");
+        return visitorService.listMyVisitors(communityId, jwt.getSubject());
+    }
+
+    @GetMapping("/{communityId}/visitors/{visitorId}")
+    public VisitorResponse getVisitor(@PathVariable("communityId") Long communityId,
+                                       @PathVariable("visitorId") Long visitorId,
+                                       @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside getVisitor method of CommunityController");
+        return visitorService.getVisitor(communityId, visitorId, jwt.getSubject());
+    }
+
+    @PostMapping("/{communityId}/visitors/{visitorId}/check-in")
+    public VisitorResponse checkIn(@PathVariable("communityId") Long communityId,
+                                    @PathVariable("visitorId") Long visitorId,
+                                    @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside checkIn method of CommunityController");
+        return visitorService.checkIn(communityId, visitorId, jwt.getSubject());
+    }
+
+    @PostMapping("/{communityId}/visitors/{visitorId}/check-out")
+    public VisitorResponse checkOut(@PathVariable("communityId") Long communityId,
+                                     @PathVariable("visitorId") Long visitorId,
+                                     @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside checkOut method of CommunityController");
+        return visitorService.checkOut(communityId, visitorId, jwt.getSubject());
     }
 }

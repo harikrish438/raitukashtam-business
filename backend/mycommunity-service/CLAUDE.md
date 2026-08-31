@@ -37,9 +37,10 @@ convention) — this file only covers what's specific to `mycommunity-service`.
   renamed `CommunityRole.OWNER` to `RESIDENT` and added the
   `community_join_request` table; `V3` added the `announcement` table
   (Phase 2); `V4` added the `bill` table (Phase 3); `V5` added the
-  `payment` table (Phase 4); `V6` added the `expense` table (Phase 5).
-  Phase 6 (Dashboard aggregation) added no migration — it's a pure
-  read-model over existing tables, no new schema. See auth-service's own
+  `payment` table (Phase 4); `V6` added the `expense` table (Phase 5);
+  `V7` added the `visitor` table (Phase 7). Phase 6 (Dashboard
+  aggregation) added no migration — it's a pure read-model over existing
+  tables, no new schema. See auth-service's own
   Flyway convention (`baseline-on-migrate`/`baseline-version` in
   `application.yml`) — this service now follows the same pattern.
 
@@ -117,6 +118,25 @@ source's own top 10 before merging guarantees the true top 10 overall is
 never missed). `AnnouncementService.toResponse` was made package-private
 for this phase to reuse, same pattern as `BillService.requireBill`
 earlier.
+- **Visitor** (Phase 7, new 2026-08-31): community (FK), host (FK →
+  `CommunityMember`, the resident who invited/is hosting this guest),
+  guestName, type (enum `GUEST`/`DELIVERY`/`STAFF`/`OTHER`), purpose
+  (optional free text), status (`EXPECTED`/`CHECKED_IN`/`CHECKED_OUT`),
+  entryTime, exitTime. Unlike Announcements/Bills/Expenses, the natural
+  actor creating a Visitor record is the **host resident themselves**
+  (any ACTIVE member), not the community admin — matches the "Add
+  Visitor" quick-access card being available to every user, not just
+  admins. `POST .../visitors` supports two flows in one call via a
+  `checkedInNow` flag: pre-approval (`EXPECTED`, no entryTime — "I'm
+  expecting a guest later") when false/omitted, or an already-arrived
+  walk-in logged after the fact (`CHECKED_IN`, entryTime=now) when true.
+  `check-in`/`check-out` transition the lifecycle (`EXPECTED`→
+  `CHECKED_IN`→`CHECKED_OUT`, 409 if called out of order) and are
+  callable by **either the host or an ADMIN** — this system has no
+  dedicated gate-guard role yet, so ADMIN stands in for that at the gate.
+  ADMIN additionally sees every visitor in the community
+  (`GET .../visitors`); a resident only sees their own
+  (`GET .../visitors/mine`) — same visibility split as Bills/Payments.
 
 Endpoints (`/api/v1/communities`, all require a Bearer JWT):
 
@@ -151,9 +171,15 @@ Endpoints (`/api/v1/communities`, all require a Bearer JWT):
 | GET | `/api/v1/communities/{id}/expenses/{expenseId}` | Caller must be an ACTIVE ADMIN |
 | DELETE | `/api/v1/communities/{id}/expenses/{expenseId}` | Caller must be an ACTIVE ADMIN |
 | GET | `/api/v1/communities/{id}/dashboard` | Caller must be an ACTIVE ADMIN |
+| POST | `/api/v1/communities/{id}/visitors` | Any ACTIVE member; host = caller; `checkedInNow` picks EXPECTED vs CHECKED_IN |
+| GET | `/api/v1/communities/{id}/visitors` | Caller must be an ACTIVE ADMIN; all visitors in the community |
+| GET | `/api/v1/communities/{id}/visitors/mine` | Any ACTIVE member; their own hosted visitors only |
+| GET | `/api/v1/communities/{id}/visitors/{visitorId}` | Caller must be an ACTIVE ADMIN, or the visitor's host |
+| POST | `/api/v1/communities/{id}/visitors/{visitorId}/check-in` | Caller must be the host or an ACTIVE ADMIN; 409 unless EXPECTED |
+| POST | `/api/v1/communities/{id}/visitors/{visitorId}/check-out` | Caller must be the host or an ACTIVE ADMIN; 409 unless CHECKED_IN |
 
-A 13-phase roadmap for the remaining feature areas (visitors, amenities,
-helpdesk, staff/vendor, documents, structured units, committee/RWA, push
+A 13-phase roadmap for the remaining feature areas (amenities, helpdesk,
+staff/vendor, documents, structured units, committee/RWA, push
 notification delivery) was agreed
 with the user — see repo-root
 `PROGRESS.md`'s 2026-08-31 session entry (5). The original full data
