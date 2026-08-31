@@ -39,7 +39,8 @@ convention) — this file only covers what's specific to `mycommunity-service`.
   (Phase 2); `V4` added the `bill` table (Phase 3); `V5` added the
   `payment` table (Phase 4); `V6` added the `expense` table (Phase 5);
   `V7` added the `visitor` table (Phase 7); `V8` added the `amenity` and
-  `amenity_booking` tables (Phase 8). Phase 6 (Dashboard aggregation)
+  `amenity_booking` tables (Phase 8); `V9` added the `complaint` and
+  `complaint_comment` tables (Phase 9). Phase 6 (Dashboard aggregation)
   added no migration — it's a pure read-model over existing tables, no
   new schema. See auth-service's own
   Flyway convention (`baseline-on-migrate`/`baseline-version` in
@@ -165,6 +166,33 @@ earlier.
   (Visitors) established for check-in/check-out. ADMIN sees every
   booking in the community (`GET .../amenity-bookings`); a resident sees
   only their own (`GET .../amenity-bookings/mine`).
+- **Complaint** (Phase 9, new 2026-08-31): community (FK), raisedBy (FK →
+  `CommunityMember`), category (free text, not an enum — same "too
+  open-ended" reasoning as `Expense.category`), title, description,
+  priority (enum `LOW`/`MEDIUM`/`HIGH`/`URGENT`, defaults to `MEDIUM`),
+  status (enum `OPEN`/`IN_PROGRESS`/`RESOLVED`/`CLOSED` — **strictly
+  linear, one step at a time**, `PATCH .../complaints/{id}/status` 409s
+  on any skip or backward move, checked via enum ordinal + 1; no reopen
+  in this phase), assignedTo (FK → `CommunityMember`, nullable — any
+  ACTIVE member, not role-restricted to ADMIN, since this system has no
+  staff/committee role yet). Any ACTIVE member raises one for themselves
+  (`POST .../complaints`); ADMIN triages
+  (`PATCH .../complaints/{id}/assign`, `PATCH .../complaints/{id}/status`).
+  Visibility (`GET .../complaints/{id}`) is **ADMIN, the raiser, or the
+  current assignee** — a deliberate widening of the owner-or-admin shape
+  used elsewhere, since an assignee needs to see a ticket to work it.
+  ADMIN sees every complaint (`GET .../complaints`); a resident sees only
+  their own (`GET .../complaints/mine`). SLA/TAT tracking and reporting
+  are deliberately not built here — a natural Dashboard-style follow-up
+  once this data exists, not this phase's job.
+- **ComplaintComment** (Phase 9, new 2026-08-31): complaint (FK), author
+  (FK → `CommunityMember`), comment (text). Visibility for both adding
+  (`POST .../complaints/{id}/comments`) and reading
+  (`GET .../complaints/{id}/comments`) reuses the parent Complaint's own
+  visibility rule exactly (`ComplaintService.requireVisibleToCaller`,
+  package-private, reused rather than duplicated — same convention as
+  `BillService.requireBill`/`AnnouncementService.toResponse`/
+  `AmenityService.requireAmenity` earlier).
 
 Endpoints (`/api/v1/communities`, all require a Bearer JWT):
 
@@ -216,11 +244,18 @@ Endpoints (`/api/v1/communities`, all require a Bearer JWT):
 | POST | `/api/v1/communities/{id}/amenity-bookings/{bookingId}/approve` | Caller must be an ACTIVE ADMIN; 409 unless PENDING |
 | POST | `/api/v1/communities/{id}/amenity-bookings/{bookingId}/reject` | Caller must be an ACTIVE ADMIN; 409 unless PENDING |
 | POST | `/api/v1/communities/{id}/amenity-bookings/{bookingId}/cancel` | Caller must be the booker or an ACTIVE ADMIN; 409 unless PENDING/APPROVED |
+| POST | `/api/v1/communities/{id}/complaints` | Any ACTIVE member; raiser = caller |
+| GET | `/api/v1/communities/{id}/complaints` | Caller must be an ACTIVE ADMIN; all complaints in the community |
+| GET | `/api/v1/communities/{id}/complaints/mine` | Any ACTIVE member; their own raised complaints only |
+| GET | `/api/v1/communities/{id}/complaints/{complaintId}` | Caller must be an ACTIVE ADMIN, the raiser, or the current assignee |
+| PATCH | `/api/v1/communities/{id}/complaints/{complaintId}/assign` | Caller must be an ACTIVE ADMIN; 404 if assignee isn't a member of this community |
+| PATCH | `/api/v1/communities/{id}/complaints/{complaintId}/status` | Caller must be an ACTIVE ADMIN; 409 unless advancing exactly one step |
+| POST | `/api/v1/communities/{id}/complaints/{complaintId}/comments` | Caller must be an ACTIVE ADMIN, the raiser, or the current assignee |
+| GET | `/api/v1/communities/{id}/complaints/{complaintId}/comments` | Caller must be an ACTIVE ADMIN, the raiser, or the current assignee |
 
-A 13-phase roadmap for the remaining feature areas (helpdesk,
-staff/vendor, documents, structured units, committee/RWA, push
-notification delivery) was agreed
-with the user — see repo-root
+A 13-phase roadmap for the remaining feature areas (staff/vendor,
+documents, structured units, committee/RWA, push notification delivery)
+was agreed with the user — see repo-root
 `PROGRESS.md`'s 2026-08-31 session entry (5). The original full data
 model sketch for these is in `~/.claude/plans/validated-rolling-pizza.md`
 (from the session Phase 1 was planned in) or ask for it if that file

@@ -63,7 +63,12 @@ system doesn't have) — see the 2026-08-31 session entry (10). And
 **Phase 8 (Amenities)**: ADMIN manages Amenity master data (soft-
 deactivate, no hard delete), any ACTIVE member books one for themselves
 (PENDING → ADMIN approves/rejects, mirrors the join-request lifecycle),
-booker or ADMIN cancels — see the 2026-08-31 session entry (11).
+booker or ADMIN cancels — see the 2026-08-31 session entry (11). And
+**Phase 9 (Helpdesk/Complaints)**: any ACTIVE member raises a complaint,
+ADMIN assigns/advances status through a strictly linear OPEN→IN_PROGRESS
+→RESOLVED→CLOSED lifecycle (one step at a time, no skipping/reopening),
+visible to ADMIN/raiser/assignee, with a comment thread sharing that same
+visibility rule — see the 2026-08-31 session entry (12).
 auth-service also gained a self-service `PATCH /users/me` (firstName/
 lastName/email, partial update) — the account-level counterpart to
 mycommunity-service's own member-profile update, closing a gap surfaced
@@ -77,15 +82,16 @@ the 2026-08-31 session entry (4).
 
 ## Open items / next steps
 
-- Build the remaining `mycommunity-service` phases (helpdesk,
-  staff/vendor, documents, structured units, committee/RWA, then
-  push-notification delivery once the mobile app has real networking —
-  see the full phased roadmap agreed with the user in the 2026-08-31
-  session entry (5)). Announcements (Phase 2), Maintenance & Billing
+- Build the remaining `mycommunity-service` phases (staff/vendor,
+  documents, structured units, committee/RWA, then push-notification
+  delivery once the mobile app has real networking — see the full
+  phased roadmap agreed with the user in the 2026-08-31 session
+  entry (5)). Announcements (Phase 2), Maintenance & Billing
   generation+status (Phase 3), Payments (Phase 4), Expenses (Phase 5),
-  Dashboard aggregation (Phase 6), Visitors (Phase 7), and Amenities
-  (Phase 8) are now done. Full data model for the rest already designed,
-  see the 2026-08-28 session entry below.
+  Dashboard aggregation (Phase 6), Visitors (Phase 7), Amenities
+  (Phase 8), and Helpdesk/Complaints (Phase 9) are now done. Full data
+  model for the rest already designed, see the 2026-08-28 session entry
+  below.
 - **Push notification delivery is explicitly out of scope for now** —
   discussed with the user when scoping Announcements: needs FCM
   integration, a device-token registration endpoint, and (blocking)
@@ -149,6 +155,60 @@ the 2026-08-31 session entry (4).
   accepted v1 limitation in the implementation plan, not solved.
 
 ## Sessions
+
+### 2026-08-31 (12)
+
+- **Built `mycommunity-service` Phase 9: Helpdesk/Complaints**,
+  continuing the roadmap from session (5). `Complaint` (community FK,
+  raisedBy FK, free-text category, title, description, priority enum
+  `LOW`/`MEDIUM`/`HIGH`/`URGENT` defaulting to `MEDIUM`, status enum
+  `OPEN`/`IN_PROGRESS`/`RESOLVED`/`CLOSED`, assignedTo FK nullable — any
+  ACTIVE member, not role-restricted, since there's no staff/committee
+  role yet) and `ComplaintComment` (complaint FK, author FK, text),
+  `ComplaintRepository`/`ComplaintCommentRepository`, four request DTOs/
+  two response DTOs, `ComplaintService`/`ComplaintCommentService`, eight
+  new endpoints on `CommunityController`, `V9__complaint.sql`.
+  - **Strictly linear status lifecycle**: `PATCH .../complaints/{id}/
+    status` only accepts a target exactly one step ahead of the current
+    status (checked via enum ordinal + 1) — rejects both skipping ahead
+    and moving backward with 409. No reopen in this phase.
+  - **Visibility widened beyond the usual owner-or-admin shape**: a
+    complaint (and its comments) is visible to ADMIN, the raiser, *or*
+    the current assignee — the assignee needs to see a ticket to work
+    it, which none of the prior owner-or-admin phases needed to account
+    for. `ComplaintService.requireComplaint`/`requireVisibleToCaller`
+    made package-private for `ComplaintCommentService` to reuse (same
+    convention as `BillService.requireBill`,
+    `AnnouncementService.toResponse`, `AmenityService.requireAmenity`
+    in earlier phases).
+  - Deliberately not built (scope discipline, matches how this phase was
+    originally scoped in the roadmap): SLA/TAT tracking and reporting —
+    natural Dashboard-style follow-ups once this data exists, not this
+    phase's job, same reasoning Phase 6 followed for Bills/Payments/
+    Expenses.
+  - 13 new unit tests (`ComplaintServiceTest` 9, `ComplaintCommentServiceTest`
+    4) — all pass. Full suite: 95/95 across the twelve service test
+    classes; the one pre-existing DB-dependent context test still needs
+    a live Postgres.
+  - **Live-verified end-to-end** against the rebuilt dev container: `V9`
+    applied (`flyway_schema_history` confirms). Reused community id 2.
+    Confirmed: a resident raises a complaint with no `priority` → 201
+    MEDIUM default; an explicit `URGENT` priority → 201 honored; an
+    unrelated resident `GET`-ing someone else's complaint → 403; admin
+    assigns a complaint to themselves → 200, and *that assignment alone*
+    (no separate visibility grant) lets the assignee then `GET` a
+    complaint they didn't raise → 200, proving the widened visibility
+    rule; assigning to a nonexistent member id → 404; non-admin status
+    change → 403; skipping OPEN→RESOLVED → 409; OPEN→IN_PROGRESS
+    (correct step) → 200; moving backward IN_PROGRESS→OPEN → 409;
+    IN_PROGRESS→RESOLVED (correct step) → 200; both the raiser and the
+    assignee (admin) successfully add comments, an unrelated resident
+    trying to comment → 403 (reusing the parent's own visibility check,
+    confirmed live not just by code reading); comments list back in
+    chronological order; admin `GET` all complaints vs. resident's 403
+    vs. resident's scoped `/mine` — all correct; blank title / invalid
+    priority enum → 400 both; nonexistent complaint id → 404; no
+    token → 401.
 
 ### 2026-08-31 (11)
 

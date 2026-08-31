@@ -3,8 +3,12 @@ package com.raitukashtam.mycommunity.controller;
 import com.raitukashtam.mycommunity.request.AmenityBookingRequest;
 import com.raitukashtam.mycommunity.request.AmenityRequest;
 import com.raitukashtam.mycommunity.request.AnnouncementRequest;
+import com.raitukashtam.mycommunity.request.AssignComplaintRequest;
 import com.raitukashtam.mycommunity.request.CommunityMemberRequest;
 import com.raitukashtam.mycommunity.request.CommunityRequest;
+import com.raitukashtam.mycommunity.request.ComplaintCommentRequest;
+import com.raitukashtam.mycommunity.request.ComplaintRequest;
+import com.raitukashtam.mycommunity.request.ComplaintStatusRequest;
 import com.raitukashtam.mycommunity.request.CreateVisitorRequest;
 import com.raitukashtam.mycommunity.request.ExpenseRequest;
 import com.raitukashtam.mycommunity.request.GenerateBillsRequest;
@@ -17,6 +21,8 @@ import com.raitukashtam.mycommunity.response.AnnouncementResponse;
 import com.raitukashtam.mycommunity.response.BillResponse;
 import com.raitukashtam.mycommunity.response.CommunityMemberResponse;
 import com.raitukashtam.mycommunity.response.CommunityResponse;
+import com.raitukashtam.mycommunity.response.ComplaintCommentResponse;
+import com.raitukashtam.mycommunity.response.ComplaintResponse;
 import com.raitukashtam.mycommunity.response.DashboardResponse;
 import com.raitukashtam.mycommunity.response.ExpenseResponse;
 import com.raitukashtam.mycommunity.response.JoinRequestResponse;
@@ -29,6 +35,8 @@ import com.raitukashtam.mycommunity.service.AnnouncementService;
 import com.raitukashtam.mycommunity.service.BillService;
 import com.raitukashtam.mycommunity.service.CommunityJoinRequestService;
 import com.raitukashtam.mycommunity.service.CommunityService;
+import com.raitukashtam.mycommunity.service.ComplaintCommentService;
+import com.raitukashtam.mycommunity.service.ComplaintService;
 import com.raitukashtam.mycommunity.service.DashboardService;
 import com.raitukashtam.mycommunity.service.ExpenseService;
 import com.raitukashtam.mycommunity.service.PaymentService;
@@ -77,6 +85,12 @@ public class CommunityController {
 
     @Autowired
     private AmenityBookingService amenityBookingService;
+
+    @Autowired
+    private ComplaintService complaintService;
+
+    @Autowired
+    private ComplaintCommentService complaintCommentService;
 
     @PostMapping
     public ResponseEntity<CommunityResponse> createCommunity(@RequestBody @Validated CommunityRequest request,
@@ -435,5 +449,71 @@ public class CommunityController {
                                                  @AuthenticationPrincipal Jwt jwt) {
         log.info("Inside cancelBooking method of CommunityController");
         return amenityBookingService.cancelBooking(communityId, bookingId, jwt.getSubject());
+    }
+
+    @PostMapping("/{communityId}/complaints")
+    public ResponseEntity<ComplaintResponse> createComplaint(@PathVariable("communityId") Long communityId,
+                                                               @RequestBody @Validated ComplaintRequest request,
+                                                               @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside createComplaint method of CommunityController");
+        return new ResponseEntity<>(complaintService.createComplaint(communityId, request, jwt.getSubject()), HttpStatus.CREATED);
+    }
+
+    @GetMapping("/{communityId}/complaints")
+    public List<ComplaintResponse> listComplaints(@PathVariable("communityId") Long communityId,
+                                                   @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside listComplaints method of CommunityController");
+        return complaintService.listComplaints(communityId, jwt.getSubject());
+    }
+
+    @GetMapping("/{communityId}/complaints/mine")
+    public List<ComplaintResponse> listMyComplaints(@PathVariable("communityId") Long communityId,
+                                                     @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside listMyComplaints method of CommunityController");
+        return complaintService.listMyComplaints(communityId, jwt.getSubject());
+    }
+
+    @GetMapping("/{communityId}/complaints/{complaintId}")
+    public ComplaintResponse getComplaint(@PathVariable("communityId") Long communityId,
+                                           @PathVariable("complaintId") Long complaintId,
+                                           @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside getComplaint method of CommunityController");
+        return complaintService.getComplaint(communityId, complaintId, jwt.getSubject());
+    }
+
+    @PatchMapping("/{communityId}/complaints/{complaintId}/assign")
+    public ComplaintResponse assignComplaint(@PathVariable("communityId") Long communityId,
+                                              @PathVariable("complaintId") Long complaintId,
+                                              @RequestBody @Validated AssignComplaintRequest request,
+                                              @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside assignComplaint method of CommunityController");
+        return complaintService.assignComplaint(communityId, complaintId, request, jwt.getSubject());
+    }
+
+    @PatchMapping("/{communityId}/complaints/{complaintId}/status")
+    public ComplaintResponse updateComplaintStatus(@PathVariable("communityId") Long communityId,
+                                                    @PathVariable("complaintId") Long complaintId,
+                                                    @RequestBody @Validated ComplaintStatusRequest request,
+                                                    @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside updateComplaintStatus method of CommunityController");
+        return complaintService.updateStatus(communityId, complaintId, request, jwt.getSubject());
+    }
+
+    @PostMapping("/{communityId}/complaints/{complaintId}/comments")
+    public ResponseEntity<ComplaintCommentResponse> addComplaintComment(@PathVariable("communityId") Long communityId,
+                                                                          @PathVariable("complaintId") Long complaintId,
+                                                                          @RequestBody @Validated ComplaintCommentRequest request,
+                                                                          @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside addComplaintComment method of CommunityController");
+        return new ResponseEntity<>(
+                complaintCommentService.addComment(communityId, complaintId, request, jwt.getSubject()), HttpStatus.CREATED);
+    }
+
+    @GetMapping("/{communityId}/complaints/{complaintId}/comments")
+    public List<ComplaintCommentResponse> listComplaintComments(@PathVariable("communityId") Long communityId,
+                                                                  @PathVariable("complaintId") Long complaintId,
+                                                                  @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside listComplaintComments method of CommunityController");
+        return complaintCommentService.listComments(communityId, complaintId, jwt.getSubject());
     }
 }
