@@ -43,9 +43,12 @@ posts, any ACTIVE member reads — pure data+API, no push notifications
 (deliberately deferred, see the 2026-08-31 session entry (5)). And
 **Phase 3 (Maintenance & Billing, generation + status only)**: ADMIN
 generates one `Bill` per currently-ACTIVE member at a flat amount for a
-period, marks paid; residents see their own bills, admins see all — no
-payment gateway, no separate Payment/receipt entity yet (that's Phase 4)
-— see the 2026-08-31 session entry (6).
+period; residents see their own bills, admins see all — see the
+2026-08-31 session entry (6). And **Phase 4 (Payments)**: ADMIN records a
+`Payment` (method/reference/paidAt) against a `Bill`, which flips it to
+PAID — replaced Phase 3's bare mark-paid endpoint entirely (no external
+caller existed yet). No payment gateway integration — still deliberately
+out of scope, see Open items — see the 2026-08-31 session entry (7).
 auth-service also gained a self-service `PATCH /users/me` (firstName/
 lastName/email, partial update) — the account-level counterpart to
 mycommunity-service's own member-profile update, closing a gap surfaced
@@ -59,13 +62,13 @@ the 2026-08-31 session entry (4).
 
 ## Open items / next steps
 
-- Build the remaining `mycommunity-service` phases (Payments/receipts
-  against existing Bills, expenses, dashboard aggregation, visitors,
-  amenities, then push-notification delivery once the mobile app has real
-  networking — see the full phased roadmap agreed with the user in the
-  2026-08-31 session entry (5)). Announcements (Phase 2) and Maintenance &
-  Billing generation+status (Phase 3) are now done. Full data model for
-  the rest already designed, see the 2026-08-28 session entry below.
+- Build the remaining `mycommunity-service` phases (expenses, dashboard
+  aggregation, visitors, amenities, then push-notification delivery once
+  the mobile app has real networking — see the full phased roadmap agreed
+  with the user in the 2026-08-31 session entry (5)). Announcements
+  (Phase 2), Maintenance & Billing generation+status (Phase 3), and
+  Payments (Phase 4) are now done. Full data model for the rest already
+  designed, see the 2026-08-28 session entry below.
 - **Push notification delivery is explicitly out of scope for now** —
   discussed with the user when scoping Announcements: needs FCM
   integration, a device-token registration endpoint, and (blocking)
@@ -129,6 +132,56 @@ the 2026-08-31 session entry (4).
   accepted v1 limitation in the implementation plan, not solved.
 
 ## Sessions
+
+### 2026-08-31 (7)
+
+- **Built `mycommunity-service` Phase 4: Payments**, continuing the
+  roadmap from session (5). Added a proper `Payment` entity (community
+  FK, bill FK unique — one full payment per bill, no partial payments in
+  v1, amount copied from the bill at recording time, method enum `CASH`/
+  `BANK_TRANSFER`/`UPI`/`CHEQUE`/`OTHER`, optional reference, paidAt
+  defaulting to now but overridable for back-dating, recordedBy FK →
+  `CommunityMember`), `PaymentRepository`, `RecordPaymentRequest`/
+  `PaymentResponse`, `PaymentService` (delegates membership auth to
+  `CommunityService`, bill lookup to `BillService.requireBill` — made
+  package-private for this reuse rather than duplicating the "bill
+  exists in this community" query), four new endpoints on
+  `CommunityController` (`POST .../bills/{id}/payments`,
+  `GET .../bills/{id}/payment`, `GET .../payments` [admin, all],
+  `GET .../payments/mine` [own]), `V5__payment.sql`.
+  - **Removed Phase 3's `PATCH .../bills/{id}/mark-paid` and
+    `BillService.markPaid` entirely**, replacing it with
+    `POST .../bills/{id}/payments` — a straight replacement, not a
+    parallel path, since no external caller existed yet for the old one
+    (the mobile app still has no networking code) and keeping two ways
+    to mark a bill paid would just be unwanted duplication. Its two unit
+    tests were removed from `BillServiceTest` accordingly (now 6 tests,
+    was 8).
+  - 9 new unit tests (`PaymentServiceTest`, same mocked-repos-plus-real-
+    service pattern as prior phases, this time layering a real
+    `BillService` under a real `CommunityService`) — all pass. Full
+    suite: 42/42 across the five service test classes
+    (`CommunityServiceTest` 13, `CommunityJoinRequestServiceTest` 7,
+    `AnnouncementServiceTest` 7, `BillServiceTest` 6, `PaymentServiceTest`
+    9); the one pre-existing DB-dependent context test still needs a
+    live Postgres, same as every prior session.
+  - **Live-verified end-to-end** against the rebuilt dev container: `V5`
+    applied (`flyway_schema_history` confirms). Reused community id 2
+    and its two bills from session (6). Confirmed: non-admin record
+    payment → 403; admin records a payment on the still-`PENDING` bill →
+    201, bill flips to `PAID`; recording again on the same bill → 409;
+    recording against the *other* bill (already `PAID` via the
+    now-removed legacy `mark-paid` from session (6), so it has no
+    `Payment` row at all) → 409 correctly, proving the check is against
+    `Bill.status`, not `Payment` existence; `GET .../payment` for that
+    same legacy-paid bill → 404 (no payment row exists, exactly as
+    expected — a real gap this replacement doesn't retroactively
+    backfill, harmless test data); admin/owner `GET .../payment` → 200,
+    a different resident → 403; admin `GET .../payments` (all) → 200,
+    resident → 403; `GET .../payments/mine` scoped correctly for both
+    identities; missing/invalid `method` → 400; confirmed the old
+    `mark-paid` route now 404s (route genuinely removed, not just
+    unreachable); nonexistent bill's payment → 404.
 
 ### 2026-08-31 (6)
 

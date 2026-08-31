@@ -6,16 +6,19 @@ import com.raitukashtam.mycommunity.request.CommunityRequest;
 import com.raitukashtam.mycommunity.request.GenerateBillsRequest;
 import com.raitukashtam.mycommunity.request.JoinRequestRequest;
 import com.raitukashtam.mycommunity.request.MemberProfileUpdateRequest;
+import com.raitukashtam.mycommunity.request.RecordPaymentRequest;
 import com.raitukashtam.mycommunity.response.AnnouncementResponse;
 import com.raitukashtam.mycommunity.response.BillResponse;
 import com.raitukashtam.mycommunity.response.CommunityMemberResponse;
 import com.raitukashtam.mycommunity.response.CommunityResponse;
 import com.raitukashtam.mycommunity.response.JoinRequestResponse;
 import com.raitukashtam.mycommunity.response.MyCommunityResponse;
+import com.raitukashtam.mycommunity.response.PaymentResponse;
 import com.raitukashtam.mycommunity.service.AnnouncementService;
 import com.raitukashtam.mycommunity.service.BillService;
 import com.raitukashtam.mycommunity.service.CommunityJoinRequestService;
 import com.raitukashtam.mycommunity.service.CommunityService;
+import com.raitukashtam.mycommunity.service.PaymentService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -42,6 +45,9 @@ public class CommunityController {
 
     @Autowired
     private BillService billService;
+
+    @Autowired
+    private PaymentService paymentService;
 
     @PostMapping
     public ResponseEntity<CommunityResponse> createCommunity(@RequestBody @Validated CommunityRequest request,
@@ -198,11 +204,35 @@ public class CommunityController {
         return billService.getBill(communityId, billId, jwt.getSubject());
     }
 
-    @PatchMapping("/{communityId}/bills/{billId}/mark-paid")
-    public BillResponse markPaid(@PathVariable("communityId") Long communityId,
-                                  @PathVariable("billId") Long billId,
-                                  @AuthenticationPrincipal Jwt jwt) {
-        log.info("Inside markPaid method of CommunityController");
-        return billService.markPaid(communityId, billId, jwt.getSubject());
+    @PostMapping("/{communityId}/bills/{billId}/payments")
+    public ResponseEntity<PaymentResponse> recordPayment(@PathVariable("communityId") Long communityId,
+                                                           @PathVariable("billId") Long billId,
+                                                           @RequestBody @Validated RecordPaymentRequest request,
+                                                           @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside recordPayment method of CommunityController");
+        return new ResponseEntity<>(
+                paymentService.recordPayment(communityId, billId, request, jwt.getSubject()), HttpStatus.CREATED);
+    }
+
+    @GetMapping("/{communityId}/bills/{billId}/payment")
+    public PaymentResponse getPaymentForBill(@PathVariable("communityId") Long communityId,
+                                              @PathVariable("billId") Long billId,
+                                              @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside getPaymentForBill method of CommunityController");
+        return paymentService.getPaymentForBill(communityId, billId, jwt.getSubject());
+    }
+
+    @GetMapping("/{communityId}/payments")
+    public List<PaymentResponse> listPayments(@PathVariable("communityId") Long communityId,
+                                               @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside listPayments method of CommunityController");
+        return paymentService.listPayments(communityId, jwt.getSubject());
+    }
+
+    @GetMapping("/{communityId}/payments/mine")
+    public List<PaymentResponse> listMyPayments(@PathVariable("communityId") Long communityId,
+                                                 @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside listMyPayments method of CommunityController");
+        return paymentService.listMyPayments(communityId, jwt.getSubject());
     }
 }

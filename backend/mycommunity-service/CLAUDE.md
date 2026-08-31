@@ -36,9 +36,10 @@ convention) — this file only covers what's specific to `mycommunity-service`.
   generated from `pg_dump` against the live dev schema at the time; `V2`
   renamed `CommunityRole.OWNER` to `RESIDENT` and added the
   `community_join_request` table; `V3` added the `announcement` table
-  (Phase 2); `V4` added the `bill` table (Phase 3). See auth-service's own
-  Flyway convention (`baseline-on-migrate`/`baseline-version` in
-  `application.yml`) — this service now follows the same pattern.
+  (Phase 2); `V4` added the `bill` table (Phase 3); `V5` added the
+  `payment` table (Phase 4). See auth-service's own Flyway convention
+  (`baseline-on-migrate`/`baseline-version` in `application.yml`) — this
+  service now follows the same pattern.
 
 ## Domain model (Phase 1, extended 2026-08-31 — registration, roles, join requests)
 
@@ -71,10 +72,18 @@ convention) — this file only covers what's specific to `mycommunity-service`.
   (unique constraint) — `POST .../bills/generate` creates one for every
   currently-ACTIVE member at a single flat amount per batch (`Community`
   has no per-unit size/area field yet to vary it by; that's Phase 12).
-  409s if that period was already generated for the community. No
-  separate `Payment`/receipt entity or payment-method tracking yet —
-  `markPaid` is a bare status transition (ADMIN only); richer payment
-  history/receipts is Phase 4.
+  409s if that period was already generated for the community.
+- **Payment** (Phase 4, new 2026-08-31): community (FK), bill (FK →
+  `Bill`, unique — one full payment per bill, no partial payments in v1),
+  amount (copied from the bill at recording time), method (enum `CASH`/
+  `BANK_TRANSFER`/`UPI`/`CHEQUE`/`OTHER`), reference (nullable —
+  transaction id/cheque number), paidAt (optional in the request,
+  defaults to now — lets an admin back-date a payment that happened
+  earlier), recordedBy (FK → `CommunityMember`). Recording a payment
+  flips its `Bill.status` to `PAID`. **Replaces** Phase 3's bare `PATCH
+  .../bills/{id}/mark-paid`, which is removed — no external caller
+  existed yet (mobile app still has no networking code), so this was a
+  straight replacement rather than keeping two ways to mark a bill paid.
 
 Endpoints (`/api/v1/communities`, all require a Bearer JWT):
 
@@ -100,12 +109,15 @@ Endpoints (`/api/v1/communities`, all require a Bearer JWT):
 | GET | `/api/v1/communities/{id}/bills` | Caller must be an ACTIVE ADMIN; all bills in the community |
 | GET | `/api/v1/communities/{id}/bills/mine` | Any ACTIVE member; their own bills only |
 | GET | `/api/v1/communities/{id}/bills/{billId}` | Caller must be an ACTIVE ADMIN, or the bill's own member |
-| PATCH | `/api/v1/communities/{id}/bills/{billId}/mark-paid` | Caller must be an ACTIVE ADMIN; 409 if already PAID |
+| POST | `/api/v1/communities/{id}/bills/{billId}/payments` | Caller must be an ACTIVE ADMIN; 409 if the bill is already PAID; flips the bill to PAID |
+| GET | `/api/v1/communities/{id}/bills/{billId}/payment` | Caller must be an ACTIVE ADMIN, or the bill's own member; 404 if no payment recorded yet |
+| GET | `/api/v1/communities/{id}/payments` | Caller must be an ACTIVE ADMIN; all payments in the community |
+| GET | `/api/v1/communities/{id}/payments/mine` | Any ACTIVE member; their own payments only |
 
-A 13-phase roadmap for the remaining feature areas (payments/receipts,
-expenses, dashboard aggregation, visitors, amenities, helpdesk,
-staff/vendor, documents, structured units, committee/RWA, push
-notification delivery) was agreed with the user — see repo-root
+A 13-phase roadmap for the remaining feature areas (expenses, dashboard
+aggregation, visitors, amenities, helpdesk, staff/vendor, documents,
+structured units, committee/RWA, push notification delivery) was agreed
+with the user — see repo-root
 `PROGRESS.md`'s 2026-08-31 session entry (5). The original full data
 model sketch for these is in `~/.claude/plans/validated-rolling-pizza.md`
 (from the session Phase 1 was planned in) or ask for it if that file

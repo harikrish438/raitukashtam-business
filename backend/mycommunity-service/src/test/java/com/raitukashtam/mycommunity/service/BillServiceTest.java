@@ -18,7 +18,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -173,46 +172,6 @@ class BillServiceTest {
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getMemberId()).isEqualTo(6L);
-    }
-
-    @Test
-    void markPaid_transitionsToPaid_whenCallerIsAdmin() {
-        BillService service = buildService();
-        CommunityMember admin = member(5L, CommunityRole.ADMIN);
-        when(communityRepository.existsById(COMMUNITY_ID)).thenReturn(true);
-        when(communityMemberRepository.findByCommunity_IdAndIdentityIdAndStatus(COMMUNITY_ID, CALLER_IDENTITY, MemberStatus.ACTIVE))
-                .thenReturn(Optional.of(admin));
-
-        Bill bill = new Bill();
-        bill.setId(100L);
-        bill.setCommunity(community(COMMUNITY_ID));
-        bill.setMember(member(6L, CommunityRole.RESIDENT));
-        bill.setStatus(BillStatus.PENDING);
-        when(billRepository.findByIdAndCommunity_Id(100L, COMMUNITY_ID)).thenReturn(Optional.of(bill));
-        when(billRepository.save(any(Bill.class))).thenAnswer(invocation -> invocation.getArgument(0));
-
-        BillResponse response = service.markPaid(COMMUNITY_ID, 100L, CALLER_IDENTITY);
-
-        assertThat(response.getStatus()).isEqualTo(BillStatus.PAID);
-        assertThat(response.getPaidAt()).isNotNull();
-    }
-
-    @Test
-    void markPaid_throwsConflict_whenAlreadyPaid() {
-        BillService service = buildService();
-        CommunityMember admin = member(5L, CommunityRole.ADMIN);
-        when(communityRepository.existsById(COMMUNITY_ID)).thenReturn(true);
-        when(communityMemberRepository.findByCommunity_IdAndIdentityIdAndStatus(COMMUNITY_ID, CALLER_IDENTITY, MemberStatus.ACTIVE))
-                .thenReturn(Optional.of(admin));
-
-        Bill bill = new Bill();
-        bill.setId(100L);
-        bill.setStatus(BillStatus.PAID);
-        when(billRepository.findByIdAndCommunity_Id(100L, COMMUNITY_ID)).thenReturn(Optional.of(bill));
-
-        assertThatThrownBy(() -> service.markPaid(COMMUNITY_ID, 100L, CALLER_IDENTITY))
-                .isInstanceOf(ResponseStatusException.class);
-        verify(billRepository, never()).save(any());
     }
 
     @Test

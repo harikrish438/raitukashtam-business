@@ -21,7 +21,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -102,24 +101,16 @@ public class BillService {
         return toResponse(bill);
     }
 
-    @Transactional
-    public BillResponse markPaid(Long communityId, Long billId, String callerIdentityId) {
-        communityService.requireActiveAdmin(communityId, callerIdentityId);
-        Bill bill = requireBill(communityId, billId);
-        if (bill.getStatus() == BillStatus.PAID) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Bill is already marked paid");
-        }
-        bill.setStatus(BillStatus.PAID);
-        bill.setPaidAt(LocalDateTime.now());
-        return toResponse(billRepository.save(bill));
-    }
-
-    private Bill requireBill(Long communityId, Long billId) {
+    /**
+     * Package-private -- reused by PaymentService so recording a payment
+     * doesn't duplicate the "bill exists in this community" lookup.
+     */
+    Bill requireBill(Long communityId, Long billId) {
         return billRepository.findByIdAndCommunity_Id(billId, communityId)
                 .orElseThrow(() -> new ResourceNotFoundException("Bill not found with id: " + billId));
     }
 
-    private BillResponse toResponse(Bill bill) {
+    BillResponse toResponse(Bill bill) {
         return new BillResponse(
                 bill.getId(),
                 bill.getCommunity().getId(),
