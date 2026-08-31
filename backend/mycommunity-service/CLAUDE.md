@@ -37,9 +37,10 @@ convention) — this file only covers what's specific to `mycommunity-service`.
   renamed `CommunityRole.OWNER` to `RESIDENT` and added the
   `community_join_request` table; `V3` added the `announcement` table
   (Phase 2); `V4` added the `bill` table (Phase 3); `V5` added the
-  `payment` table (Phase 4). See auth-service's own Flyway convention
-  (`baseline-on-migrate`/`baseline-version` in `application.yml`) — this
-  service now follows the same pattern.
+  `payment` table (Phase 4); `V6` added the `expense` table (Phase 5).
+  See auth-service's own Flyway convention (`baseline-on-migrate`/
+  `baseline-version` in `application.yml`) — this service now follows the
+  same pattern.
 
 ## Domain model (Phase 1, extended 2026-08-31 — registration, roles, join requests)
 
@@ -84,6 +85,16 @@ convention) — this file only covers what's specific to `mycommunity-service`.
   .../bills/{id}/mark-paid`, which is removed — no external caller
   existed yet (mobile app still has no networking code), so this was a
   straight replacement rather than keeping two ways to mark a bill paid.
+- **Expense** (Phase 5, new 2026-08-31): community (FK), category
+  (free-text, not an enum — unlike `PaymentMethod`, expense categories
+  are open-ended), description, amount (`BigDecimal`), expenseDate
+  (optional in the request, defaults to today, back-datable, cannot be
+  future-dated), createdByMember (FK → `CommunityMember`). **ADMIN-only
+  end to end** — create, list, get, and delete all require ADMIN, per the
+  user's spec noted back when Phase 1 was planned. Unlike Bills/Payments,
+  expenses have no natural "my expenses" subset (they belong to the
+  community as a whole, not an individual member), so there's no
+  resident-facing read path at all, not even for their own reference.
 
 Endpoints (`/api/v1/communities`, all require a Bearer JWT):
 
@@ -113,16 +124,19 @@ Endpoints (`/api/v1/communities`, all require a Bearer JWT):
 | GET | `/api/v1/communities/{id}/bills/{billId}/payment` | Caller must be an ACTIVE ADMIN, or the bill's own member; 404 if no payment recorded yet |
 | GET | `/api/v1/communities/{id}/payments` | Caller must be an ACTIVE ADMIN; all payments in the community |
 | GET | `/api/v1/communities/{id}/payments/mine` | Any ACTIVE member; their own payments only |
+| POST | `/api/v1/communities/{id}/expenses` | Caller must be an ACTIVE ADMIN |
+| GET | `/api/v1/communities/{id}/expenses` | Caller must be an ACTIVE ADMIN; newest expenseDate first |
+| GET | `/api/v1/communities/{id}/expenses/{expenseId}` | Caller must be an ACTIVE ADMIN |
+| DELETE | `/api/v1/communities/{id}/expenses/{expenseId}` | Caller must be an ACTIVE ADMIN |
 
-A 13-phase roadmap for the remaining feature areas (expenses, dashboard
+A 13-phase roadmap for the remaining feature areas (dashboard
 aggregation, visitors, amenities, helpdesk, staff/vendor, documents,
 structured units, committee/RWA, push notification delivery) was agreed
 with the user — see repo-root
 `PROGRESS.md`'s 2026-08-31 session entry (5). The original full data
 model sketch for these is in `~/.claude/plans/validated-rolling-pizza.md`
 (from the session Phase 1 was planned in) or ask for it if that file
-isn't available. Expenses is explicitly ADMIN-only per the user's spec,
-not yet designed in detail.
+isn't available.
 
 ## Known gaps (not this service's to fix, but block real end-to-end use)
 

@@ -3,6 +3,7 @@ package com.raitukashtam.mycommunity.controller;
 import com.raitukashtam.mycommunity.request.AnnouncementRequest;
 import com.raitukashtam.mycommunity.request.CommunityMemberRequest;
 import com.raitukashtam.mycommunity.request.CommunityRequest;
+import com.raitukashtam.mycommunity.request.ExpenseRequest;
 import com.raitukashtam.mycommunity.request.GenerateBillsRequest;
 import com.raitukashtam.mycommunity.request.JoinRequestRequest;
 import com.raitukashtam.mycommunity.request.MemberProfileUpdateRequest;
@@ -11,6 +12,7 @@ import com.raitukashtam.mycommunity.response.AnnouncementResponse;
 import com.raitukashtam.mycommunity.response.BillResponse;
 import com.raitukashtam.mycommunity.response.CommunityMemberResponse;
 import com.raitukashtam.mycommunity.response.CommunityResponse;
+import com.raitukashtam.mycommunity.response.ExpenseResponse;
 import com.raitukashtam.mycommunity.response.JoinRequestResponse;
 import com.raitukashtam.mycommunity.response.MyCommunityResponse;
 import com.raitukashtam.mycommunity.response.PaymentResponse;
@@ -18,6 +20,7 @@ import com.raitukashtam.mycommunity.service.AnnouncementService;
 import com.raitukashtam.mycommunity.service.BillService;
 import com.raitukashtam.mycommunity.service.CommunityJoinRequestService;
 import com.raitukashtam.mycommunity.service.CommunityService;
+import com.raitukashtam.mycommunity.service.ExpenseService;
 import com.raitukashtam.mycommunity.service.PaymentService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -48,6 +51,9 @@ public class CommunityController {
 
     @Autowired
     private PaymentService paymentService;
+
+    @Autowired
+    private ExpenseService expenseService;
 
     @PostMapping
     public ResponseEntity<CommunityResponse> createCommunity(@RequestBody @Validated CommunityRequest request,
@@ -234,5 +240,37 @@ public class CommunityController {
                                                  @AuthenticationPrincipal Jwt jwt) {
         log.info("Inside listMyPayments method of CommunityController");
         return paymentService.listMyPayments(communityId, jwt.getSubject());
+    }
+
+    @PostMapping("/{communityId}/expenses")
+    public ResponseEntity<ExpenseResponse> createExpense(@PathVariable("communityId") Long communityId,
+                                                           @RequestBody @Validated ExpenseRequest request,
+                                                           @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside createExpense method of CommunityController");
+        return new ResponseEntity<>(expenseService.createExpense(communityId, request, jwt.getSubject()), HttpStatus.CREATED);
+    }
+
+    @GetMapping("/{communityId}/expenses")
+    public List<ExpenseResponse> listExpenses(@PathVariable("communityId") Long communityId,
+                                               @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside listExpenses method of CommunityController");
+        return expenseService.listExpenses(communityId, jwt.getSubject());
+    }
+
+    @GetMapping("/{communityId}/expenses/{expenseId}")
+    public ExpenseResponse getExpense(@PathVariable("communityId") Long communityId,
+                                       @PathVariable("expenseId") Long expenseId,
+                                       @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside getExpense method of CommunityController");
+        return expenseService.getExpense(communityId, expenseId, jwt.getSubject());
+    }
+
+    @DeleteMapping("/{communityId}/expenses/{expenseId}")
+    public ResponseEntity<Void> deleteExpense(@PathVariable("communityId") Long communityId,
+                                               @PathVariable("expenseId") Long expenseId,
+                                               @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside deleteExpense method of CommunityController");
+        expenseService.deleteExpense(communityId, expenseId, jwt.getSubject());
+        return ResponseEntity.noContent().build();
     }
 }

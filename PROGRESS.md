@@ -48,7 +48,10 @@ period; residents see their own bills, admins see all — see the
 `Payment` (method/reference/paidAt) against a `Bill`, which flips it to
 PAID — replaced Phase 3's bare mark-paid endpoint entirely (no external
 caller existed yet). No payment gateway integration — still deliberately
-out of scope, see Open items — see the 2026-08-31 session entry (7).
+out of scope, see Open items — see the 2026-08-31 session entry (7). And
+**Phase 5 (Expenses)**: ADMIN-only end to end (create/list/get/delete,
+no resident visibility at all — expenses belong to the community, not an
+individual member) — see the 2026-08-31 session entry (8).
 auth-service also gained a self-service `PATCH /users/me` (firstName/
 lastName/email, partial update) — the account-level counterpart to
 mycommunity-service's own member-profile update, closing a gap surfaced
@@ -62,13 +65,13 @@ the 2026-08-31 session entry (4).
 
 ## Open items / next steps
 
-- Build the remaining `mycommunity-service` phases (expenses, dashboard
+- Build the remaining `mycommunity-service` phases (dashboard
   aggregation, visitors, amenities, then push-notification delivery once
   the mobile app has real networking — see the full phased roadmap agreed
   with the user in the 2026-08-31 session entry (5)). Announcements
-  (Phase 2), Maintenance & Billing generation+status (Phase 3), and
-  Payments (Phase 4) are now done. Full data model for the rest already
-  designed, see the 2026-08-28 session entry below.
+  (Phase 2), Maintenance & Billing generation+status (Phase 3), Payments
+  (Phase 4), and Expenses (Phase 5) are now done. Full data model for the
+  rest already designed, see the 2026-08-28 session entry below.
 - **Push notification delivery is explicitly out of scope for now** —
   discussed with the user when scoping Announcements: needs FCM
   integration, a device-token registration endpoint, and (blocking)
@@ -132,6 +135,42 @@ the 2026-08-31 session entry (4).
   accepted v1 limitation in the implementation plan, not solved.
 
 ## Sessions
+
+### 2026-08-31 (8)
+
+- **Built `mycommunity-service` Phase 5: Expenses**, continuing the
+  roadmap from session (5). `Expense` entity (community FK, free-text
+  category — deliberately not an enum like `PaymentMethod`, since expense
+  categories are open-ended rather than a closed real-world set;
+  description; `BigDecimal` amount; expenseDate optional in the request
+  — defaults to today, back-datable, rejected if future-dated;
+  createdByMember FK → `CommunityMember`), `ExpenseRepository`,
+  `ExpenseRequest`/`ExpenseResponse`, `ExpenseService`, four new
+  endpoints on `CommunityController` (`POST`/`GET` list/`GET` one/
+  `DELETE` under `/api/v1/communities/{id}/expenses`), `V6__expense.sql`.
+  - **ADMIN-only end to end, including reads** — per the user's spec
+    recorded back when Phase 1 was planned. Unlike Bills/Payments,
+    Expenses has no resident-facing path at all, not even a "mine"
+    subset, since expenses belong to the community as a whole rather
+    than an individual member — there is nothing for a resident to see
+    that's "theirs."
+  - 8 new unit tests (`ExpenseServiceTest`, same pattern as prior
+    phases) — all pass. Full suite: 50/50 across the six service test
+    classes (`CommunityServiceTest` 13, `CommunityJoinRequestServiceTest`
+    7, `AnnouncementServiceTest` 7, `BillServiceTest` 6,
+    `PaymentServiceTest` 9, `ExpenseServiceTest` 8); the one pre-existing
+    DB-dependent context test still needs a live Postgres, same as every
+    prior session.
+  - **Live-verified end-to-end** against the rebuilt dev container: `V6`
+    applied (`flyway_schema_history` confirms). Reused community id 2.
+    Confirmed: non-admin create → 403; admin create with no
+    `expenseDate` → 201, defaults to today; admin create with a
+    back-dated `expenseDate` → 201, honored as given; admin `GET` list →
+    200, ordered newest-`expenseDate`-first; **resident `GET` list/get-
+    by-id → 403 both** (confirming the "no resident visibility at all"
+    design, not just a "mine"-scoping omission); blank `category` → 400;
+    future `expenseDate` → 400; nonexistent expense id → 404; admin
+    delete → 204, confirmed gone from the list afterward; no token → 401.
 
 ### 2026-08-31 (7)
 
