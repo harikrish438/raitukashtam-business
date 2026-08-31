@@ -47,6 +47,13 @@ public class GlobalExceptionHandler {
         return createErrorResponse(ex.getMessage(), HttpStatus.CONFLICT);
     }
 
+    @ExceptionHandler(InvalidRequestException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Map<String, Object> handleInvalidRequest(InvalidRequestException ex) {
+        log.error("Invalid request: {}", ex.getMessage());
+        return createErrorResponse(ex.getMessage(), HttpStatus.BAD_REQUEST);
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Map<String, Object> handleMethodArgumentNotValid(MethodArgumentNotValidException ex) {

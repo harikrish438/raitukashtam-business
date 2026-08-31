@@ -23,38 +23,64 @@ convention) — this file only covers what's specific to `mycommunity-service`.
   A controller reads the caller's identity via
   `@AuthenticationPrincipal Jwt jwt` → `jwt.getSubject()` (the auth
   Identity UUID) — see `CommunityController`.
-- Calling `auth-service` over the network (`http://auth-service:8080`) is
-  **not currently needed** — Phase 1 never looks up user profile data
-  from auth-service; admins/unit-owners type their own name/mobile
-  directly into the mobile app's forms. A later phase that needs to
-  resolve identityId → profile will need to reintroduce a
-  `RestTemplate`/`WebClient` bean (removed along with the old
-  product-service-era `/users/{id}` call in this rename).
+- **Calls `auth-service` over the network** (`http://auth-service:8080`,
+  `AuthServiceClient` → `GET /users/me`, forwarding the caller's own
+  Bearer token) to resolve the caller's real mobile number/name — added
+  2026-08-31 to stop trusting a client-supplied admin mobile number at
+  community creation, and reused for the invited-member-activation flow.
+  This is a `RestTemplate` call (not `WebClient`), reintroducing the
+  cross-service dependency this file used to say wasn't needed.
+- **Uses Flyway** for schema migrations (`src/main/resources/db/
+  migration/`), added 2026-08-31 — previously Hibernate `ddl-auto` only
+  (`update` in dev, `validate` in test/prod already). `V1` is a baseline
+  generated from `pg_dump` against the live dev schema at the time; `V2`
+  renamed `CommunityRole.OWNER` to `RESIDENT` and added the
+  `community_join_request` table. See auth-service's own Flyway
+  convention (`baseline-on-migrate`/`baseline-version` in
+  `application.yml`) — this service now follows the same pattern.
 
-## Domain model (Phase 1 — Community + unit-owner onboarding only)
+## Domain model (Phase 1, extended 2026-08-31 — registration, roles, join requests)
 
 - **Community**: name, totalUnits, street, area, district, state, pincode,
-  landmark.
+  landmark. `(name, pincode)` (normalized) must be unique — `POST
+  /communities` 409s with the existing community's id/name otherwise.
 - **CommunityMember**: community (FK), name, unitNumber, mobileNumber
-  (unique per community), role (`ADMIN`/`OWNER`), status
-  (`INVITED`/`ACTIVE`), identityId (nullable — the auth Identity UUID,
-  linked once that mobile number completes a real login; **there is no
-  "activate" endpoint yet** — see Known gaps below).
+  (unique per community), email (nullable, self-service only — never set
+  at invite time), role (`ADMIN`/`RESIDENT` — renamed from `OWNER`
+  2026-08-31), status (`INVITED`/`ACTIVE`), identityId (nullable — the
+  auth Identity UUID, linked once that mobile number completes a real
+  login via `POST /communities/members/activate-invitations`).
+- **CommunityJoinRequest** (new 2026-08-31): community (FK),
+  requesterIdentityId, requesterMobileNumber (resolved server-side, never
+  client-supplied), requesterName, status (`PENDING`/`APPROVED`/
+  `REJECTED`). At most one `PENDING` request per identity per community
+  (partial unique index) — a past `REJECTED` request doesn't block asking
+  again. This is the "I wasn't invited" path, surfaced when `POST
+  /communities` 409s on a duplicate community.
 
 Endpoints (`/api/v1/communities`, all require a Bearer JWT):
 
 | Method | Path | Auth rule |
 |---|---|---|
-| POST | `/api/v1/communities` | Any authenticated caller; becomes the community's first ACTIVE ADMIN |
+| POST | `/api/v1/communities` | Any authenticated caller; becomes the community's first ACTIVE ADMIN (mobile/name resolved from auth-service `/users/me`, not client-supplied); 409 on duplicate `(name, pincode)` |
+| GET | `/api/v1/communities/mine` | Any authenticated caller; lists their own communities+role+status |
+| POST | `/api/v1/communities/members/activate-invitations` | Any authenticated caller; links any `INVITED` rows matching their real mobile number, returns the same shape as `/mine` |
 | GET | `/api/v1/communities/{id}` | Caller must be an ACTIVE member (any role) |
-| POST | `/api/v1/communities/{id}/members` | Caller must be an ACTIVE ADMIN; 409 on duplicate mobile in the same community |
+| POST | `/api/v1/communities/{id}/members` | Caller must be an ACTIVE ADMIN; 409 on duplicate mobile in the same community; new member is `RESIDENT`/`INVITED` |
 | GET | `/api/v1/communities/{id}/members` | Caller must be an ACTIVE member |
+| PATCH | `/api/v1/communities/{id}/members/me` | Caller must be an ACTIVE member; updates own name/email/unitNumber |
 | DELETE | `/api/v1/communities/{id}/members/{memberId}` | Caller must be an ACTIVE ADMIN; 409 if it's the last ACTIVE ADMIN |
+| POST | `/api/v1/communities/{id}/join-requests` | Any authenticated caller not already an active member; 409 if already a member or a PENDING request exists |
+| GET | `/api/v1/communities/{id}/join-requests` | Caller must be an ACTIVE ADMIN; lists PENDING requests |
+| POST | `/api/v1/communities/{id}/join-requests/{reqId}/approve` | Caller must be an ACTIVE ADMIN; creates an ACTIVE RESIDENT member |
+| POST | `/api/v1/communities/{id}/join-requests/{reqId}/reject` | Caller must be an ACTIVE ADMIN |
 
 Later phases (dashboard aggregation, bills/payments, expenses, visitors,
 announcements, amenities) are designed but not yet built — see
 `~/.claude/plans/validated-rolling-pizza.md` in the session this was
 planned in, or ask for the full data model if that file isn't available.
+Expenses is explicitly ADMIN-only per the user's spec, not yet designed
+in detail.
 
 ## Known gaps (not this service's to fix, but block real end-to-end use)
 
@@ -67,20 +93,16 @@ planned in, or ask for the full data model if that file isn't available.
    `PROGRESS.md` entry, 2026-08-28) — what's missing now is purely the
    Android app calling those endpoints (confirmed by reading every screen:
    `OtpActivity.verifyOtp()` is a `TODO` that just navigates to the
-   dashboard).
-2. **No endpoint yet to link an invited member's `identityId`** once they
-   complete a real login (matching by mobile number). auth-service now
-   exposes `GET /users/me` (added 2026-08-28) to resolve a caller's own
-   mobile number from their Bearer token, so the pieces exist to build
-   this — but nothing here calls it yet, and it's moot until #1 (real
-   mobile login) actually produces a Bearer token to test it with. Phase 1
-   only ever creates `CommunityMember` rows with `identityId` left null
-   for invited (non-admin) owners.
+   dashboard). This also blocks live-testing the join-request
+   approve/reject path with a genuine second identity (see 2026-08-31
+   session in `PROGRESS.md`) and the mobile app's own missing screens
+   (Select-Community, Set-Up-PIN) that this service's new endpoints exist
+   to support.
 
 ## Files in this directory
 ```
 backend/mycommunity-service/
-├── Dockerfile                      # Plain Maven build, no external auth needed
+├── Dockerfile                      # Plain Maven build, no GitHub Packages dependency
 ├── docker-compose.local-postgres.yml  # Local-only: Postgres on 5433 for `mvn spring-boot:run`
 ├── docker-compose.yml              # DEV stack (default: docker compose up)
 ├── docker-compose.test.yml         # TEST stack
@@ -119,12 +141,16 @@ with a name conflict, `docker inspect <id> --format '{{index .Config.Labels
 "com.docker.compose.project"}}'` on the conflicting container tells you
 which project actually owns it before you remove it.
 
-If you change the `Community`/`CommunityMember` entity shape again, the
-dev Postgres volume (`mycommunity-service_mycommunity-pgdata`) will need
-resetting (`docker compose down` then `docker volume rm
-mycommunity-service_mycommunity-pgdata`) — Hibernate's dev-profile
-`ddl-auto: update` only adds columns, it won't drop/relax old ones, so a
-changed NOT NULL column from a prior schema will make every insert fail.
+Schema changes now go through Flyway (`src/main/resources/db/migration/`,
+added 2026-08-31), not `ddl-auto` — dev is `validate` now, same as
+test/prod. Add a new versioned migration for any entity change; don't
+edit `V1__baseline_schema.sql` after the fact. A migration that changes
+an existing column in an incompatible way (like the `OWNER`→`RESIDENT`
+enum rename) still needs the dev Postgres volume reset if old rows exist
+that the new constraint would reject (`docker compose down` then `docker
+volume rm mycommunity-service_mycommunity-pgdata`) — Flyway itself won't
+touch or migrate existing row data beyond what you write into the
+migration's SQL.
 
 ## History
 

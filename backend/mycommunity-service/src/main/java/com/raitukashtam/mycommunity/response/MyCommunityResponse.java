@@ -6,19 +6,12 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDateTime;
-
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class CommunityMemberResponse {
-    private Long id;
+public class MyCommunityResponse {
     private Long communityId;
-    private String name;
-    private String unitNumber;
-    private String mobileNumber;
-    private String email;
+    private String communityName;
     private CommunityRole role;
     private MemberStatus status;
-    private LocalDateTime createdAt;
 }

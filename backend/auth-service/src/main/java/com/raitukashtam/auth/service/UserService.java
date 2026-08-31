@@ -10,8 +10,10 @@ import com.raitukashtam.auth.entity.ProductMembership;
 import com.raitukashtam.auth.entity.User;
 import com.raitukashtam.auth.exception.AccountLockedException;
 import com.raitukashtam.auth.exception.AuthenticationException;
+import com.raitukashtam.auth.exception.InvalidRequestException;
 import com.raitukashtam.auth.exception.ResourceAlreadyExistsException;
 import com.raitukashtam.auth.exception.ResourceNotFoundException;
+import com.raitukashtam.auth.request.UpdateProfileRequest;
 import com.raitukashtam.auth.repository.IdentityCredentialRepository;
 import com.raitukashtam.auth.repository.IdentityRepository;
 import com.raitukashtam.auth.repository.ProductMembershipRepository;
@@ -148,6 +150,47 @@ public class UserService {
     @Transactional(readOnly = true)
     public UserResponse getCurrentUser(UUID identityId) {
         return toUserResponse(findByIdentityId(identityId));
+    }
+
+    /**
+     * Self-service update of the caller's own firstName/lastName/email --
+     * a null field is left unchanged. mobileNumber is deliberately not
+     * updatable here, see UpdateProfileRequest. Does not touch
+     * Identity.primaryEmail -- password-login username resolution goes
+     * through User.email (see authenticate/findUserByEmail above), so
+     * that's the field that actually needs to stay authoritative; keeping
+     * this change scoped to it avoids touching the separate identity
+     * record this codebase doesn't otherwise keep in lockstep with it.
+     */
+    @Transactional
+    public UserResponse updateMyProfile(UUID identityId, UpdateProfileRequest request) {
+        User user = findByIdentityId(identityId);
+
+        if (request.getFirstName() != null) {
+            if (request.getFirstName().isBlank()) {
+                throw new InvalidRequestException("First name cannot be blank");
+            }
+            user.setFirstName(request.getFirstName().trim());
+        }
+        if (request.getLastName() != null) {
+            if (request.getLastName().isBlank()) {
+                throw new InvalidRequestException("Last name cannot be blank");
+            }
+            user.setLastName(request.getLastName().trim());
+        }
+        if (request.getEmail() != null) {
+            String newEmail = request.getEmail().trim();
+            if (newEmail.isBlank()) {
+                throw new InvalidRequestException("Email cannot be blank");
+            }
+            if (!newEmail.equals(user.getEmail()) && userRepository.existsByEmail(newEmail)) {
+                throw new ResourceAlreadyExistsException("Email already in use");
+            }
+            user.setEmail(newEmail);
+        }
+
+        User saved = userRepository.save(user);
+        return toUserResponse(saved);
     }
 
     @Transactional

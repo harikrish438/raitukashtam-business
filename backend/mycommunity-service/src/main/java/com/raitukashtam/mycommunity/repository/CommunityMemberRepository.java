@@ -22,4 +22,8 @@ public interface CommunityMemberRepository extends JpaRepository<CommunityMember
     Optional<CommunityMember> findByIdAndCommunity_Id(Long id, Long communityId);
 
     long countByCommunity_IdAndRoleAndStatus(Long communityId, CommunityRole role, MemberStatus status);
+
+    List<CommunityMember> findByIdentityId(String identityId);
+
+    List<CommunityMember> findByMobileNumberAndStatusAndIdentityIdIsNull(String mobileNumber, MemberStatus status);
 }

@@ -2,7 +2,6 @@ package com.raitukashtam.mycommunity.request;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
 import lombok.Data;
 
@@ -31,8 +30,4 @@ public class CommunityRequest {
     private String pincode;
 
     private String landmark;
-
-    @NotBlank(message = "Admin mobile number is required")
-    @Pattern(regexp = "^[6-9]\\d{9}$", message = "Admin mobile number must be a valid 10-digit Indian mobile number")
-    private String adminMobile;
 }

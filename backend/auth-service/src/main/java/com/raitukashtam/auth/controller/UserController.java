@@ -4,6 +4,7 @@ import com.raitukashtam.auth.config.OpenApiConfig;
 import com.raitukashtam.auth.entity.User;
 import com.raitukashtam.auth.request.PlatformAdminRequest;
 import com.raitukashtam.auth.request.RegisterRequest;
+import com.raitukashtam.auth.request.UpdateProfileRequest;
 import com.raitukashtam.auth.response.UserResponse;
 import com.raitukashtam.auth.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -57,6 +58,24 @@ public class UserController {
             throw new UsernameNotFoundException("Invalid or unknown identity");
         }
         return ResponseEntity.ok(userService.getCurrentUser(identityId));
+    }
+
+    @PatchMapping("/me")
+    @Tag(name = OpenApiConfig.TAG_SELF_SERVICE)
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(summary = "Update the caller's own profile", description = "Requires a Bearer token "
+            + "backed by a real Identity. Partial update -- a null field in the request body is left "
+            + "unchanged. Does not accept mobileNumber (tied to OTP verification, changing it here would "
+            + "be an account-takeover risk) or a password (use the existing password-change flow).")
+    public ResponseEntity<UserResponse> updateMyProfile(@Valid @RequestBody UpdateProfileRequest request,
+                                                          @AuthenticationPrincipal Jwt jwt) {
+        UUID identityId;
+        try {
+            identityId = UUID.fromString(jwt.getSubject());
+        } catch (IllegalArgumentException e) {
+            throw new UsernameNotFoundException("Invalid or unknown identity");
+        }
+        return ResponseEntity.ok(userService.updateMyProfile(identityId, request));
     }
 
     @GetMapping("/{id}")

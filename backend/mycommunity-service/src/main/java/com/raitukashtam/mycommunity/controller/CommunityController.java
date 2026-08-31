@@ -2,8 +2,13 @@ package com.raitukashtam.mycommunity.controller;
 
 import com.raitukashtam.mycommunity.request.CommunityMemberRequest;
 import com.raitukashtam.mycommunity.request.CommunityRequest;
+import com.raitukashtam.mycommunity.request.JoinRequestRequest;
+import com.raitukashtam.mycommunity.request.MemberProfileUpdateRequest;
 import com.raitukashtam.mycommunity.response.CommunityMemberResponse;
 import com.raitukashtam.mycommunity.response.CommunityResponse;
+import com.raitukashtam.mycommunity.response.JoinRequestResponse;
+import com.raitukashtam.mycommunity.response.MyCommunityResponse;
+import com.raitukashtam.mycommunity.service.CommunityJoinRequestService;
 import com.raitukashtam.mycommunity.service.CommunityService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,11 +28,27 @@ public class CommunityController {
     @Autowired
     private CommunityService communityService;
 
+    @Autowired
+    private CommunityJoinRequestService joinRequestService;
+
     @PostMapping
     public ResponseEntity<CommunityResponse> createCommunity(@RequestBody @Validated CommunityRequest request,
                                                                @AuthenticationPrincipal Jwt jwt) {
         log.info("Inside createCommunity method of CommunityController");
-        return new ResponseEntity<>(communityService.createCommunity(request, jwt.getSubject()), HttpStatus.CREATED);
+        return new ResponseEntity<>(
+                communityService.createCommunity(request, jwt.getSubject(), jwt.getTokenValue()), HttpStatus.CREATED);
+    }
+
+    @GetMapping("/mine")
+    public List<MyCommunityResponse> listMyCommunities(@AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside listMyCommunities method of CommunityController");
+        return communityService.listMyCommunities(jwt.getSubject());
+    }
+
+    @PostMapping("/members/activate-invitations")
+    public List<MyCommunityResponse> activateInvitations(@AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside activateInvitations method of CommunityController");
+        return communityService.activateInvitations(jwt.getSubject(), jwt.getTokenValue());
     }
 
     @GetMapping("/{communityId}")
@@ -52,12 +73,53 @@ public class CommunityController {
         return communityService.listMembers(communityId, jwt.getSubject());
     }
 
+    @PatchMapping("/{communityId}/members/me")
+    public CommunityMemberResponse updateMyProfile(@PathVariable("communityId") Long communityId,
+                                                     @RequestBody @Validated MemberProfileUpdateRequest request,
+                                                     @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside updateMyProfile method of CommunityController");
+        return communityService.updateMyProfile(communityId, request, jwt.getSubject());
+    }
+
     @DeleteMapping("/{communityId}/members/{memberId}")
     public ResponseEntity<Void> removeMember(@PathVariable("communityId") Long communityId,
                                               @PathVariable("memberId") Long memberId,
                                               @AuthenticationPrincipal Jwt jwt) {
         log.info("Inside removeMember method of CommunityController");
         communityService.removeMember(communityId, memberId, jwt.getSubject());
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{communityId}/join-requests")
+    public ResponseEntity<JoinRequestResponse> createJoinRequest(@PathVariable("communityId") Long communityId,
+                                                                   @RequestBody @Validated JoinRequestRequest request,
+                                                                   @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside createJoinRequest method of CommunityController");
+        return new ResponseEntity<>(
+                joinRequestService.createJoinRequest(communityId, request, jwt.getSubject(), jwt.getTokenValue()), HttpStatus.CREATED);
+    }
+
+    @GetMapping("/{communityId}/join-requests")
+    public List<JoinRequestResponse> listJoinRequests(@PathVariable("communityId") Long communityId,
+                                                        @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside listJoinRequests method of CommunityController");
+        return joinRequestService.listPendingJoinRequests(communityId, jwt.getSubject());
+    }
+
+    @PostMapping("/{communityId}/join-requests/{requestId}/approve")
+    public CommunityMemberResponse approveJoinRequest(@PathVariable("communityId") Long communityId,
+                                                        @PathVariable("requestId") Long requestId,
+                                                        @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside approveJoinRequest method of CommunityController");
+        return joinRequestService.approveJoinRequest(communityId, requestId, jwt.getSubject());
+    }
+
+    @PostMapping("/{communityId}/join-requests/{requestId}/reject")
+    public ResponseEntity<Void> rejectJoinRequest(@PathVariable("communityId") Long communityId,
+                                                    @PathVariable("requestId") Long requestId,
+                                                    @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside rejectJoinRequest method of CommunityController");
+        joinRequestService.rejectJoinRequest(communityId, requestId, jwt.getSubject());
         return ResponseEntity.noContent().build();
     }
 }

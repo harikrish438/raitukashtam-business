@@ -30,7 +30,19 @@ Verified live end-to-end against the running dev container, including the
 per-device lockout; not yet used by the (still nonexistent) mobile app
 networking code. `POST /otp/login` for `MYCOMMUNITY` (broken since the
 2026-08-30 DB reset) is fixed and live-verified with a real SMS OTP — see
-the 2026-08-31 session entry.
+the 2026-08-31 session entry. `mycommunity-service`'s Phase 1 domain has
+since been extended with community-registration dedup, a
+GET-`/users/me`-derived admin (no more client-supplied admin mobile),
+`CommunityRole.OWNER` renamed to `RESIDENT`, self-service profile updates,
+a "list my communities"/"activate my invitations" pair for the mobile
+app's post-login branch, and a full join-request flow for someone who
+wasn't invited — see the 2026-08-31 session entry. This service also
+gained its first Flyway migrations (previously Hibernate `ddl-auto` only).
+auth-service also gained a self-service `PATCH /users/me` (firstName/
+lastName/email, partial update) — the account-level counterpart to
+mycommunity-service's own member-profile update, closing a gap surfaced
+by the `mysociety` app's bottom-nav "Profile" tab — see the 2026-08-31
+session entry (3).
 
 ## Open items / next steps
 
@@ -45,12 +57,19 @@ the 2026-08-31 session entry.
   via the PLATFORM_ADMIN API, not code, see the 2026-08-28 session entry —
   and `/oauth2/authorize` + `/oauth2/token` already work) — this is purely
   an Android app implementation gap now, not a backend one.
-- No endpoint yet to link an invited `CommunityMember`'s `identityId` once
-  they complete a real login (matched by mobile number). auth-service now
-  has everything this needs (`GET /users/me` to resolve the caller's own
-  mobile number from a Bearer token) — but the linking endpoint itself
-  isn't built in `mycommunity-service` yet, and can't be tested for real
-  until the mobile app can actually get a token (item above).
+- **Fixed**: linking an invited `CommunityMember`'s `identityId` on first
+  real login now has an endpoint — `POST /api/v1/communities/members/
+  activate-invitations` — live-verified 2026-08-31 (see that session
+  entry). Not yet callable end-to-end by a real user, since that still
+  needs the mobile app's own networking code (item above) to actually
+  reach it after OTP login.
+- The join-request flow's create-when-already-a-member rejection
+  (`POST /communities/{id}/join-requests` → 409) is live-verified
+  (2026-08-31 session); approve/reject themselves are not — they're
+  covered by unit tests only (`CommunityJoinRequestServiceTest`), since
+  live-testing the real "second identity requests to join, first
+  identity's admin approves it" path needs a second real registered
+  mobile number.
 - Decide AWS deploy pipeline ownership for this repo: does
   raitukashtam-business get its own ECR + EC2 (or other) deploy workflow,
   or reuse infra some other way? Nothing exists yet — `auth-ci.yml` and
@@ -86,6 +105,151 @@ the 2026-08-31 session entry.
   accepted v1 limitation in the implementation plan, not solved.
 
 ## Sessions
+
+### 2026-08-31 (3)
+
+- **Reminded of, then closed, the account-level profile-update gap**
+  surfaced while reviewing the `mysociety` app's remaining screens against
+  the backend: `DashboardActivity`'s bottom nav has a `Profile` tab (see
+  `bottom_nav.xml`), and unlike `mycommunity-service`'s just-added
+  `PATCH .../members/me` (session (2) below), auth-service had no
+  self-service way for a user to edit their own name/email at all —
+  `UserController` only had `GET /users/me` (read-only), an admin-only
+  `PATCH /users/{id}/platform-admin`, and an admin-only PIN-device revoke.
+  - Added `PATCH /users/me` (`UpdateProfileRequest`: firstName/lastName/
+    email, all optional — a null field is left unchanged, a present-but-
+    blank one 400s via a new `InvalidRequestException` +
+    `GlobalExceptionHandler` entry, matching the existing per-exception-
+    type convention rather than reusing a generic one). Deliberately
+    excludes `mobileNumber` (tied to OTP verification — changing it here
+    without re-proving possession would be an account-takeover risk) and
+    password (existing change-password flow already covers that).
+    Doesn't touch `Identity.primaryEmail` — password-login username
+    resolution goes through `User.email` (confirmed by reading
+    `UserService.authenticate`/`findUserByEmail`), so scoped the change to
+    the field that's actually authoritative rather than also touching a
+    separate record nothing else in this codebase keeps in lockstep with.
+  - **Found and fixed a real security gap while wiring this up, before it
+    ever shipped**: none of the existing `SecurityConfig` matchers covered
+    a bare `PATCH /users/me` (only `PATCH /users/*/platform-admin` was
+    gated) — it would have fallen through to the trailing
+    `.requestMatchers("/**").permitAll()`, reaching the controller with a
+    `null` `Jwt` and NPE-ing into a generic 500 instead of a real 401 (not
+    an actual authorization control, just an accident of a null-pointer
+    crash). Added an explicit
+    `.requestMatchers(HttpMethod.PATCH, "/users/me").authenticated()`
+    matcher before implementing the controller method, not after.
+  - Added 5 tests to `UserControllerApiTest` (no token → 401, updates
+    name+email and leaves the rest unchanged, blank firstName → 400,
+    invalid email format → 400, email already in use → 409). Full suite
+    104/104 passing (was 99).
+  - **Verified live end-to-end** against the rebuilt dev container via the
+    same `newman`-driven PKCE approach used earlier this session: `PATCH`
+    → 200 with the updated fields, a follow-up `GET /users/me` confirming
+    persistence, and a blank-firstName request → 400 with the expected
+    message. Note: this used the real `raitukashtam@gmail.com` platform
+    admin account (the only real login available), so its `firstName` is
+    now literally `"HariUpdated"` in the dev DB — harmless (dev-only,
+    cosmetic), left as-is rather than guess at reverting to an unknown
+    prior value.
+
+### 2026-08-31 (2)
+
+- **Extended `mycommunity-service`'s Phase 1 domain** to cover the real
+  registration/onboarding flow described by the user (register a
+  community, get forced into ADMIN, select-a-community-or-register
+  branching, invited-member linking, self-service profile completion),
+  planned collaboratively then implemented in one pass:
+  - **Introduced Flyway to `mycommunity-service`** (previously Hibernate
+    `ddl-auto` only, unlike auth-service) — `V1__baseline_schema.sql`
+    (generated via `pg_dump --schema-only` against the live dev DB,
+    cleaned up, matching auth-service's own baseline convention) +
+    `V2__rename_owner_to_resident_and_join_requests.sql`. Dev profile
+    switched from `ddl-auto: update` to `validate` (test/prod already
+    were). Discovered along the way that Hibernate 6's `@Enumerated
+    (STRING)` auto-generates a `CHECK` constraint from the enum's
+    declared values (not documented behavior the team had relied on
+    before) — confirmed via `pg_dump`, not assumed, before writing V2's
+    constraint-drop/recreate.
+  - **`CommunityRole.OWNER` renamed to `RESIDENT`** — a resident isn't
+    necessarily the unit owner, and matches the user's actual spec
+    ("every community will have two roles, ADMIN, RESIDENT"). Required a
+    full dev DB reset (`docker compose down` + volume rm, done by the
+    user directly — auto mode's classifier blocks a Bash tool call doing
+    this) since the enum rename would otherwise strand old `'OWNER'` rows
+    against a `CHECK` constraint that no longer allows that value.
+  - **`CommunityRequest.adminMobile` removed** — was client-supplied,
+    letting any caller name any mobile number as a community's admin.
+    New `AuthServiceClient` (`GET {AUTH_SERVICE_URL}/users/me`, forwarding
+    the caller's own Bearer token) resolves the real admin identity
+    instead — reintroduces the auth-service call this service's own
+    CLAUDE.md had flagged as removed since the `product-service` rename
+    (Phase 1 never needed one). Also derives the admin's display name
+    from auth-service's `firstName`/`lastName` instead of the hardcoded
+    placeholder `"Community Admin"`.
+  - **Duplicate-community prevention**: `POST /communities` now checks
+    `(name, pincode)` (normalized) before creating, and 409s with a new
+    `DuplicateCommunityException` → structured body
+    (`existingCommunityId`/`existingCommunityName`) via a new
+    `GlobalExceptionHandler` (`@RestControllerAdvice`) — the only
+    exception in this service that needs one, since
+    `ResourceNotFoundException`/`ResourceAlreadyExistsException` still
+    use plain `@ResponseStatus` and don't need structured bodies.
+  - **New join-request flow** for someone who hits that 409 and isn't a
+    member yet: `CommunityJoinRequest` entity (`PENDING`/`APPROVED`/
+    `REJECTED`, a partial unique index enforcing at most one `PENDING`
+    request per identity per community) + `CommunityJoinRequestService` +
+    four endpoints (`POST .../join-requests`, `GET .../join-requests`
+    ADMIN-only, `POST .../join-requests/{id}/approve|reject` ADMIN-only).
+    No notification channel exists (no push/SMS infra for this) — a
+    pending request just sits there until an admin checks the list.
+    `CommunityJoinRequestService` delegates membership-authorization
+    checks (`requireActiveMember`/`requireActiveAdmin`) to
+    `CommunityService` rather than duplicating that logic.
+  - **`GET /communities/mine`** (list the caller's communities+role+status,
+    for the mobile app's post-login "select your community" branch) and
+    **`POST /communities/members/activate-invitations`** (resolves the
+    caller's real mobile via `/users/me`, flips any matching `INVITED`
+    rows to `ACTIVE`+linked `identityId` — the "invited member logs in
+    for real" gap flagged as open since 2026-08-28 — and returns the same
+    shape as `/mine`, so the mobile app can call this once right after
+    every OTP login and get its full community list back in one call).
+  - **`PATCH /communities/{id}/members/me`** — self-service `name`/
+    `email`/`unitNumber` update for an `ACTIVE` member. `email` is a new
+    nullable `CommunityMember` column. `unitNumber` was added to this
+    beyond the user's literal ask (name+email) because a join-request-
+    approved member starts with a placeholder `"-"` unit (unlike an
+    admin-invited member, who gets a real one at invite time) and had no
+    other way to ever correct it.
+  - Updated `CommunityServiceTest` for the new signatures/rename, added
+    `createCommunity_throwsDuplicateCommunity...`,
+    `listMyCommunities_returnsMappedList`,
+    `activateInvitations_linksInvitedMembersMatchingCallerMobile`,
+    `updateMyProfile_*` (13 tests total, was 6), plus a new
+    `CommunityJoinRequestServiceTest` (7 tests) covering create/list/
+    approve/reject and their authorization/conflict branches. Full
+    offline unit suite: 20/20 passing (the pre-existing `@SpringBootTest`
+    context test, `MyCommunityServiceApplicationTests`, still needs its
+    own local Postgres on 5433 to run at all — unrelated to this session,
+    not attempted).
+  - **Verified live end-to-end** against a freshly-reset dev container
+    (Flyway V1+V2 applied cleanly on an empty schema, confirmed via
+    `\d community_member`/`\d community_join_request` matching the
+    intended schema exactly) using a real platform-admin Bearer token
+    (via the same `newman`-driven PKCE approach as the OTP-login fix
+    above): create → 201 with the admin's mobile correctly resolved from
+    `/users/me` (not client-supplied); duplicate create → 409 with the
+    structured body; `/mine` → 200 with the new membership; `activate-
+    invitations` → 200 no-op (nothing to activate) confirming
+    idempotency; `PATCH .../members/me` → 200 with name/email/unitNumber
+    all updated; a join-request against one's own community → 409
+    (already an active member); `POST .../members` (invite) → 201 with
+    `role: "RESIDENT"`, `status: "INVITED"`. Approve/reject and the full
+    invited-member-activation path are unit-tested only (see Open items).
+  - Not built this session (deliberately out of scope, per the user's own
+    "initial requirements" framing): the mobile app screens this backend
+    work unblocks (Select-Community, Set-Up-PIN, wiring `OtpActivity`/
+    `CommunityOnboardingActivity` for real), and the expenses feature.
 
 ### 2026-08-31
 

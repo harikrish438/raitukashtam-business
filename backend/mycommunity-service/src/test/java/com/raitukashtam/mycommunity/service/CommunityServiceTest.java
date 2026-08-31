@@ -1,17 +1,22 @@
 package com.raitukashtam.mycommunity.service;
 
+import com.raitukashtam.mycommunity.client.AuthServiceClient;
+import com.raitukashtam.mycommunity.client.AuthUserProfile;
 import com.raitukashtam.mycommunity.entity.Community;
 import com.raitukashtam.mycommunity.entity.CommunityMember;
 import com.raitukashtam.mycommunity.entity.CommunityRole;
 import com.raitukashtam.mycommunity.entity.MemberStatus;
+import com.raitukashtam.mycommunity.exception.DuplicateCommunityException;
 import com.raitukashtam.mycommunity.exception.ResourceAlreadyExistsException;
 import com.raitukashtam.mycommunity.exception.ResourceNotFoundException;
 import com.raitukashtam.mycommunity.repository.CommunityMemberRepository;
 import com.raitukashtam.mycommunity.repository.CommunityRepository;
 import com.raitukashtam.mycommunity.request.CommunityMemberRequest;
 import com.raitukashtam.mycommunity.request.CommunityRequest;
+import com.raitukashtam.mycommunity.request.MemberProfileUpdateRequest;
+import com.raitukashtam.mycommunity.response.CommunityMemberResponse;
 import com.raitukashtam.mycommunity.response.CommunityResponse;
-import org.junit.jupiter.api.BeforeEach;
+import com.raitukashtam.mycommunity.response.MyCommunityResponse;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -27,8 +32,6 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -38,11 +41,14 @@ class CommunityServiceTest {
     private CommunityRepository communityRepository;
     @Mock
     private CommunityMemberRepository communityMemberRepository;
+    @Mock
+    private AuthServiceClient authServiceClient;
 
     @InjectMocks
     private CommunityService communityService;
 
     private static final String CALLER_IDENTITY = "11111111-1111-1111-1111-111111111111";
+    private static final String CALLER_TOKEN = "fake-token";
 
     private CommunityRequest communityRequest() {
         CommunityRequest request = new CommunityRequest();
@@ -53,7 +59,6 @@ class CommunityServiceTest {
         request.setDistrict("District 1");
         request.setState("State 1");
         request.setPincode("500001");
-        request.setAdminMobile("9876543210");
         return request;
     }
 
@@ -64,15 +69,24 @@ class CommunityServiceTest {
         return community;
     }
 
+    private AuthUserProfile callerProfile() {
+        AuthUserProfile profile = new AuthUserProfile();
+        profile.setMobileNumber("9876543210");
+        profile.setFirstName("Jane");
+        profile.setLastName("Doe");
+        return profile;
+    }
+
     @Test
     void createCommunity_savesCommunityAndActiveAdminMember() {
+        when(authServiceClient.getCurrentUserProfile(CALLER_TOKEN)).thenReturn(callerProfile());
         when(communityRepository.save(any(Community.class))).thenAnswer(invocation -> {
             Community c = invocation.getArgument(0);
             c.setId(1L);
             return c;
         });
 
-        CommunityResponse response = communityService.createCommunity(communityRequest(), CALLER_IDENTITY);
+        CommunityResponse response = communityService.createCommunity(communityRequest(), CALLER_IDENTITY, CALLER_TOKEN);
 
         assertThat(response.getId()).isEqualTo(1L);
         assertThat(response.getName()).isEqualTo("Green Valley Apartments");
@@ -84,6 +98,23 @@ class CommunityServiceTest {
         assertThat(savedAdmin.getStatus()).isEqualTo(MemberStatus.ACTIVE);
         assertThat(savedAdmin.getIdentityId()).isEqualTo(CALLER_IDENTITY);
         assertThat(savedAdmin.getMobileNumber()).isEqualTo("9876543210");
+        assertThat(savedAdmin.getName()).isEqualTo("Jane Doe");
+    }
+
+    @Test
+    void createCommunity_throwsDuplicateCommunity_whenMatchingNameAndPincodeExists() {
+        Community existing = communityWithId(5L);
+        when(communityRepository.findByNameIgnoreCaseAndPincode("Green Valley Apartments", "500001"))
+                .thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> communityService.createCommunity(communityRequest(), CALLER_IDENTITY, CALLER_TOKEN))
+                .isInstanceOf(DuplicateCommunityException.class)
+                .satisfies(ex -> {
+                    DuplicateCommunityException dup = (DuplicateCommunityException) ex;
+                    assertThat(dup.getExistingCommunityId()).isEqualTo(5L);
+                });
+        verify(communityRepository, never()).save(any());
+        verify(authServiceClient, never()).getCurrentUserProfile(any());
     }
 
     @Test
@@ -105,16 +136,49 @@ class CommunityServiceTest {
     }
 
     @Test
+    void listMyCommunities_returnsMappedList() {
+        CommunityMember member = new CommunityMember();
+        member.setCommunity(communityWithId(1L));
+        member.setRole(CommunityRole.RESIDENT);
+        member.setStatus(MemberStatus.ACTIVE);
+        when(communityMemberRepository.findByIdentityId(CALLER_IDENTITY)).thenReturn(List.of(member));
+
+        List<MyCommunityResponse> result = communityService.listMyCommunities(CALLER_IDENTITY);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getCommunityId()).isEqualTo(1L);
+        assertThat(result.get(0).getRole()).isEqualTo(CommunityRole.RESIDENT);
+    }
+
+    @Test
+    void activateInvitations_linksInvitedMembersMatchingCallerMobile() {
+        when(authServiceClient.getCurrentUserProfile(CALLER_TOKEN)).thenReturn(callerProfile());
+        CommunityMember invited = new CommunityMember();
+        invited.setCommunity(communityWithId(1L));
+        invited.setMobileNumber("9876543210");
+        invited.setStatus(MemberStatus.INVITED);
+        when(communityMemberRepository.findByMobileNumberAndStatusAndIdentityIdIsNull("9876543210", MemberStatus.INVITED))
+                .thenReturn(List.of(invited));
+        when(communityMemberRepository.findByIdentityId(CALLER_IDENTITY)).thenReturn(List.of(invited));
+
+        communityService.activateInvitations(CALLER_IDENTITY, CALLER_TOKEN);
+
+        assertThat(invited.getIdentityId()).isEqualTo(CALLER_IDENTITY);
+        assertThat(invited.getStatus()).isEqualTo(MemberStatus.ACTIVE);
+        verify(communityMemberRepository).saveAll(List.of(invited));
+    }
+
+    @Test
     void addMember_throwsAccessDenied_whenCallerIsNotAdmin() {
-        CommunityMember owner = new CommunityMember();
-        owner.setRole(CommunityRole.OWNER);
-        owner.setCommunity(communityWithId(1L));
+        CommunityMember resident = new CommunityMember();
+        resident.setRole(CommunityRole.RESIDENT);
+        resident.setCommunity(communityWithId(1L));
         when(communityRepository.existsById(1L)).thenReturn(true);
         when(communityMemberRepository.findByCommunity_IdAndIdentityIdAndStatus(1L, CALLER_IDENTITY, MemberStatus.ACTIVE))
-                .thenReturn(Optional.of(owner));
+                .thenReturn(Optional.of(resident));
 
         CommunityMemberRequest request = new CommunityMemberRequest();
-        request.setName("New Owner");
+        request.setName("New Resident");
         request.setUnitNumber("A-101");
         request.setMobileNumber("9876500000");
 
@@ -134,12 +198,34 @@ class CommunityServiceTest {
         when(communityMemberRepository.existsByCommunity_IdAndMobileNumber(1L, "9876500000")).thenReturn(true);
 
         CommunityMemberRequest request = new CommunityMemberRequest();
-        request.setName("New Owner");
+        request.setName("New Resident");
         request.setUnitNumber("A-101");
         request.setMobileNumber("9876500000");
 
         assertThatThrownBy(() -> communityService.addMember(1L, request, CALLER_IDENTITY))
                 .isInstanceOf(ResourceAlreadyExistsException.class);
+    }
+
+    @Test
+    void addMember_setsRoleResident() {
+        CommunityMember admin = new CommunityMember();
+        admin.setRole(CommunityRole.ADMIN);
+        admin.setCommunity(communityWithId(1L));
+        when(communityRepository.existsById(1L)).thenReturn(true);
+        when(communityMemberRepository.findByCommunity_IdAndIdentityIdAndStatus(1L, CALLER_IDENTITY, MemberStatus.ACTIVE))
+                .thenReturn(Optional.of(admin));
+        when(communityRepository.getReferenceById(1L)).thenReturn(communityWithId(1L));
+        when(communityMemberRepository.save(any(CommunityMember.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        CommunityMemberRequest request = new CommunityMemberRequest();
+        request.setName("New Resident");
+        request.setUnitNumber("A-101");
+        request.setMobileNumber("9876500000");
+
+        CommunityMemberResponse response = communityService.addMember(1L, request, CALLER_IDENTITY);
+
+        assertThat(response.getRole()).isEqualTo(CommunityRole.RESIDENT);
+        assertThat(response.getStatus()).isEqualTo(MemberStatus.INVITED);
     }
 
     @Test
@@ -176,5 +262,45 @@ class CommunityServiceTest {
         List<?> result = communityService.listMembers(1L, CALLER_IDENTITY);
 
         assertThat(result).hasSize(1);
+    }
+
+    @Test
+    void updateMyProfile_updatesNameEmailAndUnitNumber() {
+        CommunityMember member = new CommunityMember();
+        member.setRole(CommunityRole.RESIDENT);
+        member.setCommunity(communityWithId(1L));
+        member.setName("Old Name");
+        when(communityRepository.existsById(1L)).thenReturn(true);
+        when(communityMemberRepository.findByCommunity_IdAndIdentityIdAndStatus(1L, CALLER_IDENTITY, MemberStatus.ACTIVE))
+                .thenReturn(Optional.of(member));
+        when(communityMemberRepository.save(any(CommunityMember.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        MemberProfileUpdateRequest request = new MemberProfileUpdateRequest();
+        request.setName("New Name");
+        request.setEmail("new@example.com");
+        request.setUnitNumber("B-202");
+
+        CommunityMemberResponse response = communityService.updateMyProfile(1L, request, CALLER_IDENTITY);
+
+        assertThat(response.getName()).isEqualTo("New Name");
+        assertThat(response.getEmail()).isEqualTo("new@example.com");
+        assertThat(response.getUnitNumber()).isEqualTo("B-202");
+    }
+
+    @Test
+    void updateMyProfile_throwsBadRequest_whenNameBlank() {
+        CommunityMember member = new CommunityMember();
+        member.setRole(CommunityRole.RESIDENT);
+        member.setCommunity(communityWithId(1L));
+        when(communityRepository.existsById(1L)).thenReturn(true);
+        when(communityMemberRepository.findByCommunity_IdAndIdentityIdAndStatus(1L, CALLER_IDENTITY, MemberStatus.ACTIVE))
+                .thenReturn(Optional.of(member));
+
+        MemberProfileUpdateRequest request = new MemberProfileUpdateRequest();
+        request.setName("   ");
+
+        assertThatThrownBy(() -> communityService.updateMyProfile(1L, request, CALLER_IDENTITY))
+                .isInstanceOf(ResponseStatusException.class);
+        verify(communityMemberRepository, never()).save(any());
     }
 }

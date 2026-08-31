@@ -161,6 +161,68 @@ class UserControllerApiTest extends AbstractIntegrationTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
 
+    // ---------- PATCH /users/me (Self-Service) ----------
+
+    @Test
+    void updateMyProfile_noToken_returns401() {
+        ResponseEntity<String> response = patchJson("/users/me", Map.of("firstName", "New"), null);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
+    void updateMyProfile_updatesNameAndEmail_leavesUnsetFieldsUnchanged() {
+        String email = testDataFactory.uniqueEmail("profile-update");
+        testDataFactory.registerUser(email);
+        String token = new PkceFlowClient(restTemplate)
+                .loginAndGetAccessToken(baseUrl(""), WEB_CLIENT_ID, WEB_REDIRECT_URI, email, TestDataFactory.VALID_PASSWORD);
+        String newEmail = testDataFactory.uniqueEmail("profile-update-new");
+
+        ResponseEntity<String> response = patchJson("/users/me",
+                Map.of("firstName", "Updated", "email", newEmail), token);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).contains("Updated").contains(newEmail).contains("User");
+    }
+
+    @Test
+    void updateMyProfile_blankFirstName_returns400() {
+        String email = testDataFactory.uniqueEmail("profile-blank");
+        testDataFactory.registerUser(email);
+        String token = new PkceFlowClient(restTemplate)
+                .loginAndGetAccessToken(baseUrl(""), WEB_CLIENT_ID, WEB_REDIRECT_URI, email, TestDataFactory.VALID_PASSWORD);
+
+        ResponseEntity<String> response = patchJson("/users/me", Map.of("firstName", "   "), token);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
+    void updateMyProfile_invalidEmailFormat_returns400() {
+        String email = testDataFactory.uniqueEmail("profile-bademail");
+        testDataFactory.registerUser(email);
+        String token = new PkceFlowClient(restTemplate)
+                .loginAndGetAccessToken(baseUrl(""), WEB_CLIENT_ID, WEB_REDIRECT_URI, email, TestDataFactory.VALID_PASSWORD);
+
+        ResponseEntity<String> response = patchJson("/users/me", Map.of("email", "not-an-email"), token);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
+    void updateMyProfile_emailAlreadyInUse_returns409() {
+        String takenEmail = testDataFactory.uniqueEmail("profile-taken");
+        testDataFactory.registerUser(takenEmail);
+
+        String email = testDataFactory.uniqueEmail("profile-conflict");
+        testDataFactory.registerUser(email);
+        String token = new PkceFlowClient(restTemplate)
+                .loginAndGetAccessToken(baseUrl(""), WEB_CLIENT_ID, WEB_REDIRECT_URI, email, TestDataFactory.VALID_PASSWORD);
+
+        ResponseEntity<String> response = patchJson("/users/me", Map.of("email", takenEmail), token);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    }
+
     // ---------- GET /users/{id} (Business Service Integration) ----------
 
     @Test
@@ -302,6 +364,15 @@ class UserControllerApiTest extends AbstractIntegrationTest {
             headers.setBearerAuth(bearerToken);
         }
         return restTemplate.exchange(baseUrl(path), HttpMethod.GET, new HttpEntity<>(headers), String.class);
+    }
+
+    private ResponseEntity<String> patchJson(String path, Object body, String bearerToken) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        if (bearerToken != null) {
+            headers.setBearerAuth(bearerToken);
+        }
+        return restTemplate.exchange(baseUrl(path), HttpMethod.PATCH, new HttpEntity<>(body, headers), String.class);
     }
 
     private ResponseEntity<String> patchPlatformAdmin(long userId, boolean platformAdmin, String bearerToken) {

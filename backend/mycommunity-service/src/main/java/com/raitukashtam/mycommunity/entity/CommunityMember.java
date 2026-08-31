@@ -27,6 +27,9 @@ public class CommunityMember extends BaseEntity {
     @Column(name = "mobile_number", nullable = false)
     private String mobileNumber;
 
+    /** Optional -- set by the member themselves via the self-service profile update, never at invite time. */
+    private String email;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private CommunityRole role;

@@ -1,17 +1,22 @@
 package com.raitukashtam.mycommunity.service;
 
+import com.raitukashtam.mycommunity.client.AuthServiceClient;
+import com.raitukashtam.mycommunity.client.AuthUserProfile;
 import com.raitukashtam.mycommunity.entity.Community;
 import com.raitukashtam.mycommunity.entity.CommunityMember;
 import com.raitukashtam.mycommunity.entity.CommunityRole;
 import com.raitukashtam.mycommunity.entity.MemberStatus;
+import com.raitukashtam.mycommunity.exception.DuplicateCommunityException;
 import com.raitukashtam.mycommunity.exception.ResourceAlreadyExistsException;
 import com.raitukashtam.mycommunity.exception.ResourceNotFoundException;
 import com.raitukashtam.mycommunity.repository.CommunityMemberRepository;
 import com.raitukashtam.mycommunity.repository.CommunityRepository;
 import com.raitukashtam.mycommunity.request.CommunityMemberRequest;
 import com.raitukashtam.mycommunity.request.CommunityRequest;
+import com.raitukashtam.mycommunity.request.MemberProfileUpdateRequest;
 import com.raitukashtam.mycommunity.response.CommunityMemberResponse;
 import com.raitukashtam.mycommunity.response.CommunityResponse;
+import com.raitukashtam.mycommunity.response.MyCommunityResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -31,26 +36,37 @@ public class CommunityService {
     @Autowired
     private CommunityMemberRepository communityMemberRepository;
 
+    @Autowired
+    private AuthServiceClient authServiceClient;
+
     @Transactional
-    public CommunityResponse createCommunity(CommunityRequest request, String callerIdentityId) {
+    public CommunityResponse createCommunity(CommunityRequest request, String callerIdentityId, String callerToken) {
         log.info("Inside createCommunity for identity: {}", callerIdentityId);
 
+        String name = request.getName().trim();
+        String pincode = request.getPincode().trim();
+        communityRepository.findByNameIgnoreCaseAndPincode(name, pincode).ifPresent(existing -> {
+            throw new DuplicateCommunityException(existing.getId(), existing.getName());
+        });
+
+        AuthUserProfile callerProfile = requireCallerProfile(callerToken);
+
         Community community = new Community();
-        community.setName(request.getName());
+        community.setName(name);
         community.setTotalUnits(request.getTotalUnits());
         community.setStreet(request.getStreet());
         community.setArea(request.getArea());
         community.setDistrict(request.getDistrict());
         community.setState(request.getState());
-        community.setPincode(request.getPincode());
+        community.setPincode(pincode);
         community.setLandmark(request.getLandmark());
         Community savedCommunity = communityRepository.save(community);
 
         CommunityMember admin = new CommunityMember();
         admin.setCommunity(savedCommunity);
-        admin.setName("Community Admin");
+        admin.setName(displayName(callerProfile));
         admin.setUnitNumber("-");
-        admin.setMobileNumber(request.getAdminMobile());
+        admin.setMobileNumber(callerProfile.getMobileNumber());
         admin.setRole(CommunityRole.ADMIN);
         admin.setStatus(MemberStatus.ACTIVE);
         admin.setIdentityId(callerIdentityId);
@@ -63,6 +79,37 @@ public class CommunityService {
     public CommunityResponse getCommunity(Long communityId, String callerIdentityId) {
         Community community = requireActiveMember(communityId, callerIdentityId).getCommunity();
         return toResponse(community);
+    }
+
+    @Transactional(readOnly = true)
+    public List<MyCommunityResponse> listMyCommunities(String callerIdentityId) {
+        return communityMemberRepository.findByIdentityId(callerIdentityId).stream()
+                .map(member -> new MyCommunityResponse(
+                        member.getCommunity().getId(), member.getCommunity().getName(),
+                        member.getRole(), member.getStatus()))
+                .toList();
+    }
+
+    /**
+     * Links any INVITED CommunityMember rows matching the caller's real
+     * mobile number (resolved from auth-service, never client-supplied) to
+     * this identity -- the missing piece that let an admin-invited member
+     * finally act in the community once they log in for real. Idempotent:
+     * a caller with nothing to activate just gets their current list back.
+     */
+    @Transactional
+    public List<MyCommunityResponse> activateInvitations(String callerIdentityId, String callerToken) {
+        AuthUserProfile callerProfile = requireCallerProfile(callerToken);
+
+        List<CommunityMember> invited = communityMemberRepository
+                .findByMobileNumberAndStatusAndIdentityIdIsNull(callerProfile.getMobileNumber(), MemberStatus.INVITED);
+        for (CommunityMember member : invited) {
+            member.setIdentityId(callerIdentityId);
+            member.setStatus(MemberStatus.ACTIVE);
+        }
+        communityMemberRepository.saveAll(invited);
+
+        return listMyCommunities(callerIdentityId);
     }
 
     @Transactional
@@ -80,7 +127,7 @@ public class CommunityService {
         member.setName(request.getName());
         member.setUnitNumber(request.getUnitNumber());
         member.setMobileNumber(request.getMobileNumber());
-        member.setRole(CommunityRole.OWNER);
+        member.setRole(CommunityRole.RESIDENT);
         member.setStatus(MemberStatus.INVITED);
         CommunityMember saved = communityMemberRepository.save(member);
 
@@ -110,7 +157,31 @@ public class CommunityService {
         communityMemberRepository.delete(member);
     }
 
-    private CommunityMember requireActiveMember(Long communityId, String callerIdentityId) {
+    @Transactional
+    public CommunityMemberResponse updateMyProfile(Long communityId, MemberProfileUpdateRequest request, String callerIdentityId) {
+        CommunityMember member = requireActiveMember(communityId, callerIdentityId);
+
+        if (request.getName() != null) {
+            if (request.getName().isBlank()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Name cannot be blank");
+            }
+            member.setName(request.getName().trim());
+        }
+        if (request.getEmail() != null) {
+            member.setEmail(request.getEmail().trim());
+        }
+        if (request.getUnitNumber() != null) {
+            if (request.getUnitNumber().isBlank()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unit number cannot be blank");
+            }
+            member.setUnitNumber(request.getUnitNumber().trim());
+        }
+
+        CommunityMember saved = communityMemberRepository.save(member);
+        return toResponse(saved);
+    }
+
+    CommunityMember requireActiveMember(Long communityId, String callerIdentityId) {
         if (!communityRepository.existsById(communityId)) {
             throw new ResourceNotFoundException("Community not found with id: " + communityId);
         }
@@ -118,12 +189,27 @@ public class CommunityService {
                 .orElseThrow(() -> new AccessDeniedException("Not an active member of this community"));
     }
 
-    private CommunityMember requireActiveAdmin(Long communityId, String callerIdentityId) {
+    CommunityMember requireActiveAdmin(Long communityId, String callerIdentityId) {
         CommunityMember member = requireActiveMember(communityId, callerIdentityId);
         if (member.getRole() != CommunityRole.ADMIN) {
             throw new AccessDeniedException("Admin role required for this operation");
         }
         return member;
+    }
+
+    private AuthUserProfile requireCallerProfile(String callerToken) {
+        AuthUserProfile profile = authServiceClient.getCurrentUserProfile(callerToken);
+        if (profile == null || profile.getMobileNumber() == null || profile.getMobileNumber().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Could not resolve caller's mobile number from auth-service");
+        }
+        return profile;
+    }
+
+    private String displayName(AuthUserProfile profile) {
+        String first = profile.getFirstName() == null ? "" : profile.getFirstName().trim();
+        String last = profile.getLastName() == null ? "" : profile.getLastName().trim();
+        String full = (first + " " + last).trim();
+        return full.isEmpty() ? "Community Admin" : full;
     }
 
     private CommunityResponse toResponse(Community community) {
@@ -147,6 +233,7 @@ public class CommunityService {
                 member.getName(),
                 member.getUnitNumber(),
                 member.getMobileNumber(),
+                member.getEmail(),
                 member.getRole(),
                 member.getStatus(),
                 member.getCreatedAt());
