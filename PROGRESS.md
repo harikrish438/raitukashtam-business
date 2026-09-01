@@ -166,10 +166,14 @@ the 2026-08-31 session entry (4).
   raitukashtam-business get its own ECR + EC2 (or other) deploy workflow,
   or reuse infra some other way? Nothing exists yet — `auth-ci.yml` and
   `mycommunity-ci.yml` only build/test, they don't deploy.
-- `product-service-pg` — a stray leftover Postgres container from before
-  the original platform-repo split (predates this repo's existence
-  effectively), still running locally on this machine, untouched. Confirm
-  whether it holds anything worth keeping before removing it.
+- ~~`product-service-pg` stray leftover container~~ — resolved 2026-09-01:
+  the container no longer exists on this machine at all (gone from
+  `docker ps -a`, not referenced by any compose file in this repo) — the
+  prior note was stale. Its five orphaned volumes (`product-service_pgdata`,
+  `product-service_product-logs`, `product-service_product-pgdata`,
+  `raitukashtam_product-logs`, `raitukashtam_product-pgdata` — unused by
+  anything, predating both the `product-service`→`mycommunity-service`
+  rename and possibly the old platform-repo stack) were removed.
 - No TLS/reverse-proxy in front of either service yet (the platform repo
   used Caddy for this — not replicated here).
 - Production secrets (`.env.prod` values, real JWT signing keypair, Vault
