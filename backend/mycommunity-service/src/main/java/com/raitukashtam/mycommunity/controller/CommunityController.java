@@ -4,6 +4,8 @@ import com.raitukashtam.mycommunity.request.AmenityBookingRequest;
 import com.raitukashtam.mycommunity.request.AmenityRequest;
 import com.raitukashtam.mycommunity.request.AnnouncementRequest;
 import com.raitukashtam.mycommunity.request.AssignComplaintRequest;
+import com.raitukashtam.mycommunity.request.AssignUnitRequest;
+import com.raitukashtam.mycommunity.request.BillingSettingsRequest;
 import com.raitukashtam.mycommunity.request.CommunityMemberRequest;
 import com.raitukashtam.mycommunity.request.CommunityRequest;
 import com.raitukashtam.mycommunity.request.ComplaintCommentRequest;
@@ -18,6 +20,8 @@ import com.raitukashtam.mycommunity.request.MarkAttendanceRequest;
 import com.raitukashtam.mycommunity.request.MemberProfileUpdateRequest;
 import com.raitukashtam.mycommunity.request.RecordPaymentRequest;
 import com.raitukashtam.mycommunity.request.StaffRequest;
+import com.raitukashtam.mycommunity.request.UnitRequest;
+import com.raitukashtam.mycommunity.request.UnitUpdateRequest;
 import com.raitukashtam.mycommunity.request.VendorRequest;
 import com.raitukashtam.mycommunity.response.AmenityBookingResponse;
 import com.raitukashtam.mycommunity.response.AmenityResponse;
@@ -36,6 +40,7 @@ import com.raitukashtam.mycommunity.response.MyCommunityResponse;
 import com.raitukashtam.mycommunity.response.PaymentResponse;
 import com.raitukashtam.mycommunity.response.StaffAttendanceResponse;
 import com.raitukashtam.mycommunity.response.StaffResponse;
+import com.raitukashtam.mycommunity.response.UnitResponse;
 import com.raitukashtam.mycommunity.response.VendorResponse;
 import com.raitukashtam.mycommunity.response.VisitorResponse;
 import com.raitukashtam.mycommunity.service.AmenityBookingService;
@@ -52,6 +57,7 @@ import com.raitukashtam.mycommunity.service.ExpenseService;
 import com.raitukashtam.mycommunity.service.PaymentService;
 import com.raitukashtam.mycommunity.service.StaffAttendanceService;
 import com.raitukashtam.mycommunity.service.StaffService;
+import com.raitukashtam.mycommunity.service.UnitService;
 import com.raitukashtam.mycommunity.service.VendorService;
 import com.raitukashtam.mycommunity.service.VisitorService;
 import lombok.extern.slf4j.Slf4j;
@@ -121,6 +127,9 @@ public class CommunityController {
     @Autowired
     private DocumentService documentService;
 
+    @Autowired
+    private UnitService unitService;
+
     @PostMapping
     public ResponseEntity<CommunityResponse> createCommunity(@RequestBody @Validated CommunityRequest request,
                                                                @AuthenticationPrincipal Jwt jwt) {
@@ -146,6 +155,14 @@ public class CommunityController {
                                            @AuthenticationPrincipal Jwt jwt) {
         log.info("Inside getCommunity method of CommunityController");
         return communityService.getCommunity(communityId, jwt.getSubject());
+    }
+
+    @PatchMapping("/{communityId}/billing-settings")
+    public CommunityResponse updateBillingSettings(@PathVariable("communityId") Long communityId,
+                                                     @RequestBody @Validated BillingSettingsRequest request,
+                                                     @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside updateBillingSettings method of CommunityController");
+        return communityService.updateBillingSettings(communityId, request, jwt.getSubject());
     }
 
     @PostMapping("/{communityId}/members")
@@ -178,6 +195,55 @@ public class CommunityController {
         log.info("Inside removeMember method of CommunityController");
         communityService.removeMember(communityId, memberId, jwt.getSubject());
         return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/{communityId}/members/{memberId}/unit")
+    public CommunityMemberResponse assignUnitToMember(@PathVariable("communityId") Long communityId,
+                                                        @PathVariable("memberId") Long memberId,
+                                                        @RequestBody @Validated AssignUnitRequest request,
+                                                        @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside assignUnitToMember method of CommunityController");
+        return unitService.assignUnitToMember(communityId, memberId, request, jwt.getSubject());
+    }
+
+    @PostMapping("/{communityId}/units")
+    public ResponseEntity<UnitResponse> createUnit(@PathVariable("communityId") Long communityId,
+                                                     @RequestBody @Validated UnitRequest request,
+                                                     @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside createUnit method of CommunityController");
+        return new ResponseEntity<>(unitService.createUnit(communityId, request, jwt.getSubject()), HttpStatus.CREATED);
+    }
+
+    @GetMapping("/{communityId}/units")
+    public List<UnitResponse> listUnits(@PathVariable("communityId") Long communityId,
+                                         @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside listUnits method of CommunityController");
+        return unitService.listUnits(communityId, jwt.getSubject());
+    }
+
+    @GetMapping("/{communityId}/units/{unitId}")
+    public UnitResponse getUnit(@PathVariable("communityId") Long communityId,
+                                 @PathVariable("unitId") Long unitId,
+                                 @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside getUnit method of CommunityController");
+        return unitService.getUnit(communityId, unitId, jwt.getSubject());
+    }
+
+    @PatchMapping("/{communityId}/units/{unitId}")
+    public UnitResponse updateUnit(@PathVariable("communityId") Long communityId,
+                                    @PathVariable("unitId") Long unitId,
+                                    @RequestBody @Validated UnitUpdateRequest request,
+                                    @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside updateUnit method of CommunityController");
+        return unitService.updateUnit(communityId, unitId, request, jwt.getSubject());
+    }
+
+    @PatchMapping("/{communityId}/units/{unitId}/deactivate")
+    public UnitResponse deactivateUnit(@PathVariable("communityId") Long communityId,
+                                        @PathVariable("unitId") Long unitId,
+                                        @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside deactivateUnit method of CommunityController");
+        return unitService.deactivateUnit(communityId, unitId, jwt.getSubject());
     }
 
     @PostMapping("/{communityId}/join-requests")

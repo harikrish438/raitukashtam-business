@@ -1,9 +1,11 @@
 package com.raitukashtam.mycommunity.response;
 
+import com.raitukashtam.mycommunity.entity.BillingMode;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
@@ -19,5 +21,7 @@ public class CommunityResponse {
     private String state;
     private String pincode;
     private String landmark;
+    private BillingMode billingMode;
+    private BigDecimal ratePerSqft;
     private LocalDateTime createdAt;
 }

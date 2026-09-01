@@ -1,25 +1,23 @@
 package com.raitukashtam.mycommunity.response;
 
-import com.raitukashtam.mycommunity.entity.CommunityRole;
-import com.raitukashtam.mycommunity.entity.MemberStatus;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class CommunityMemberResponse {
+public class UnitResponse {
     private Long id;
     private Long communityId;
-    private String name;
     private String unitNumber;
-    private Long unitId;
-    private String mobileNumber;
-    private String email;
-    private CommunityRole role;
-    private MemberStatus status;
+    private String block;
+    private Integer floor;
+    private BigDecimal areaSqft;
+    private String unitType;
+    private boolean active;
     private LocalDateTime createdAt;
 }

@@ -2,6 +2,7 @@ package com.raitukashtam.mycommunity.service;
 
 import com.raitukashtam.mycommunity.entity.Bill;
 import com.raitukashtam.mycommunity.entity.BillStatus;
+import com.raitukashtam.mycommunity.entity.BillingMode;
 import com.raitukashtam.mycommunity.entity.Community;
 import com.raitukashtam.mycommunity.entity.CommunityMember;
 import com.raitukashtam.mycommunity.entity.CommunityRole;
@@ -21,15 +22,21 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.List;
 
 /**
  * Membership authorization (requireActiveMember/requireActiveAdmin) is
  * delegated to CommunityService, the single source of truth for "who can
  * act in this community" -- same pattern AnnouncementService/
- * CommunityJoinRequestService use. One Bill per ACTIVE member per period,
- * a single flat amount per generation batch -- Community has no per-unit
- * size/area field yet to base a varying amount on.
+ * CommunityJoinRequestService use. One Bill per ACTIVE member per period.
+ * Amount depends on Community.billingMode (Phase 12): FLAT (default --
+ * practical for most communities) applies the request's flat amount to
+ * every member unchanged from earlier phases; PER_AREA instead computes
+ * each member's amount from their linked Unit's areaSqft x the community's
+ * ratePerSqft, and rejects the batch if any ACTIVE member has no Unit/area
+ * assigned yet rather than silently under-billing them.
  */
 @Service
 @Slf4j
@@ -61,18 +68,54 @@ public class BillService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "No active members to bill in this community");
         }
 
-        List<Bill> bills = activeMembers.stream().map(member -> {
-            Bill bill = new Bill();
-            bill.setCommunity(community);
-            bill.setMember(member);
-            bill.setPeriod(request.getPeriod());
-            bill.setAmount(request.getAmount());
-            bill.setStatus(BillStatus.PENDING);
-            bill.setDueDate(request.getDueDate());
-            return bill;
-        }).toList();
+        List<Bill> bills = community.getBillingMode() == BillingMode.PER_AREA
+                ? buildAreaBasedBills(community, activeMembers, request)
+                : buildFlatBills(community, activeMembers, request);
 
         return billRepository.saveAll(bills).stream().map(this::toResponse).toList();
+    }
+
+    private List<Bill> buildFlatBills(Community community, List<CommunityMember> activeMembers, GenerateBillsRequest request) {
+        if (request.getAmount() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Amount is required when billing mode is FLAT");
+        }
+        return activeMembers.stream().map(member -> newBill(community, member, request, request.getAmount())).toList();
+    }
+
+    private List<Bill> buildAreaBasedBills(Community community, List<CommunityMember> activeMembers, GenerateBillsRequest request) {
+        if (request.getAmount() != null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Amount must not be provided when billing mode is PER_AREA -- it's computed per member from the community's rate per sqft");
+        }
+        BigDecimal ratePerSqft = community.getRatePerSqft();
+        if (ratePerSqft == null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Billing mode is PER_AREA but no rate per sqft is set for this community");
+        }
+
+        List<String> missingArea = activeMembers.stream()
+                .filter(member -> member.getUnit() == null || member.getUnit().getAreaSqft() == null)
+                .map(member -> member.getName() + " (" + member.getUnitNumber() + ")")
+                .toList();
+        if (!missingArea.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Cannot generate area-based bills -- these members have no unit area assigned: " + String.join(", ", missingArea));
+        }
+
+        return activeMembers.stream().map(member -> {
+            BigDecimal amount = ratePerSqft.multiply(member.getUnit().getAreaSqft()).setScale(2, RoundingMode.HALF_UP);
+            return newBill(community, member, request, amount);
+        }).toList();
+    }
+
+    private Bill newBill(Community community, CommunityMember member, GenerateBillsRequest request, BigDecimal amount) {
+        Bill bill = new Bill();
+        bill.setCommunity(community);
+        bill.setMember(member);
+        bill.setPeriod(request.getPeriod());
+        bill.setAmount(amount);
+        bill.setStatus(BillStatus.PENDING);
+        bill.setDueDate(request.getDueDate());
+        return bill;
     }
 
     @Transactional(readOnly = true)

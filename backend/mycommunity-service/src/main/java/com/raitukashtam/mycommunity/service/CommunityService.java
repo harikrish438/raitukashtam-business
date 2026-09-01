@@ -2,6 +2,7 @@ package com.raitukashtam.mycommunity.service;
 
 import com.raitukashtam.mycommunity.client.AuthServiceClient;
 import com.raitukashtam.mycommunity.client.AuthUserProfile;
+import com.raitukashtam.mycommunity.entity.BillingMode;
 import com.raitukashtam.mycommunity.entity.Community;
 import com.raitukashtam.mycommunity.entity.CommunityMember;
 import com.raitukashtam.mycommunity.entity.CommunityRole;
@@ -11,6 +12,7 @@ import com.raitukashtam.mycommunity.exception.ResourceAlreadyExistsException;
 import com.raitukashtam.mycommunity.exception.ResourceNotFoundException;
 import com.raitukashtam.mycommunity.repository.CommunityMemberRepository;
 import com.raitukashtam.mycommunity.repository.CommunityRepository;
+import com.raitukashtam.mycommunity.request.BillingSettingsRequest;
 import com.raitukashtam.mycommunity.request.CommunityMemberRequest;
 import com.raitukashtam.mycommunity.request.CommunityRequest;
 import com.raitukashtam.mycommunity.request.MemberProfileUpdateRequest;
@@ -181,6 +183,21 @@ public class CommunityService {
         return toResponse(saved);
     }
 
+    @Transactional
+    public CommunityResponse updateBillingSettings(Long communityId, BillingSettingsRequest request, String callerIdentityId) {
+        requireActiveAdmin(communityId, callerIdentityId);
+
+        if (request.getBillingMode() == BillingMode.PER_AREA && request.getRatePerSqft() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Rate per sqft is required when billing mode is PER_AREA");
+        }
+
+        Community community = communityRepository.getReferenceById(communityId);
+        community.setBillingMode(request.getBillingMode());
+        community.setRatePerSqft(request.getBillingMode() == BillingMode.PER_AREA ? request.getRatePerSqft() : null);
+
+        return toResponse(communityRepository.save(community));
+    }
+
     CommunityMember requireActiveMember(Long communityId, String callerIdentityId) {
         if (!communityRepository.existsById(communityId)) {
             throw new ResourceNotFoundException("Community not found with id: " + communityId);
@@ -223,15 +240,19 @@ public class CommunityService {
                 community.getState(),
                 community.getPincode(),
                 community.getLandmark(),
+                community.getBillingMode(),
+                community.getRatePerSqft(),
                 community.getCreatedAt());
     }
 
-    private CommunityMemberResponse toResponse(CommunityMember member) {
+    /** Package-private -- reused by UnitService so assigning a structured Unit to a member doesn't duplicate this mapping. */
+    CommunityMemberResponse toResponse(CommunityMember member) {
         return new CommunityMemberResponse(
                 member.getId(),
                 member.getCommunity().getId(),
                 member.getName(),
                 member.getUnitNumber(),
+                member.getUnit() == null ? null : member.getUnit().getId(),
                 member.getMobileNumber(),
                 member.getEmail(),
                 member.getRole(),

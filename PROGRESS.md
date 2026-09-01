@@ -82,6 +82,21 @@ against a new LocalStack container so this could be live-verified
 end-to-end without real AWS; ADMIN uploads/deletes, any ACTIVE member
 lists/gets/downloads filtered by `ALL_MEMBERS`/`ADMIN_ONLY` visibility.
 This service's first (and only) multipart/form-data endpoint.
+`mycommunity-service` now also has **Phase 12 (Structured units + area-
+based billing)**: a new `Unit` master-data entity (block/floor/areaSqft/
+unitType, ADMIN-managed, soft-deactivate) that `CommunityMember` can
+optionally link to (`unitId`, alongside the existing free-text
+`unitNumber` every member has had since Phase 1 — linking is an explicit
+admin action, not required); `Community` gained a `billingMode` toggle
+(`FLAT`, the default — practical for most communities, unchanged
+behavior — or `PER_AREA`) and `ratePerSqft`, settable via
+`PATCH .../billing-settings`. Bill generation now branches on
+`billingMode`: `FLAT` keeps working exactly as before (request supplies
+one amount for every member); `PER_AREA` computes each member's amount
+from `ratePerSqft x their linked unit's areaSqft` and rejects the whole
+batch (409) if any currently-ACTIVE member has no unit/area assigned
+yet, rather than silently under-billing them — see the 2026-09-01
+session entry.
 auth-service also gained a self-service `PATCH /users/me` (firstName/
 lastName/email, partial update) — the account-level counterpart to
 mycommunity-service's own member-profile update, closing a gap surfaced
@@ -95,16 +110,16 @@ the 2026-08-31 session entry (4).
 
 ## Open items / next steps
 
-- Build the remaining `mycommunity-service` phases (structured units,
-  committee/RWA, then push-notification delivery once the mobile app has
-  real networking — see the full phased roadmap agreed with the user in
-  the 2026-08-31 session entry (5)). Announcements (Phase 2), Maintenance
-  & Billing generation+status (Phase 3), Payments (Phase 4), Expenses
-  (Phase 5), Dashboard aggregation (Phase 6), Visitors (Phase 7),
-  Amenities (Phase 8), Helpdesk/Complaints (Phase 9), Staff & Vendor
-  management (Phase 10), and Community Documents (Phase 11) are now done.
-  Full data model for the rest already designed, see the 2026-08-28
-  session entry below.
+- Build the remaining `mycommunity-service` phases (committee/RWA, then
+  push-notification delivery once the mobile app has real networking —
+  see the full phased roadmap agreed with the user in the 2026-08-31
+  session entry (5)). Announcements (Phase 2), Maintenance & Billing
+  generation+status (Phase 3), Payments (Phase 4), Expenses (Phase 5),
+  Dashboard aggregation (Phase 6), Visitors (Phase 7), Amenities
+  (Phase 8), Helpdesk/Complaints (Phase 9), Staff & Vendor management
+  (Phase 10), Community Documents (Phase 11), and Structured units +
+  area-based billing (Phase 12) are now done. Full data model for the
+  rest already designed, see the 2026-08-28 session entry below.
 - **Production S3 bucket doesn't exist yet** — Phase 11 (Documents) is
   built and live-verified against LocalStack in dev only.
   `.env.test.example`/`.env.prod.example` have placeholder AWS IAM
@@ -174,6 +189,86 @@ the 2026-08-31 session entry (4).
   accepted v1 limitation in the implementation plan, not solved.
 
 ## Sessions
+
+### 2026-09-01
+
+- **Built `mycommunity-service` Phase 12: Structured units + area-based
+  billing**, continuing the roadmap from the 2026-08-31 session entry (5)
+  — user picked this over the other remaining option, committee/RWA,
+  after a fork confirmed the `mysociety` app has no committee/RWA screens
+  or fields at all (checked locally at
+  `C:\Users\harik\Documents\apps\mobile-apps\mysociety`), while structured
+  units closes a gap the code already flagged (`BillService`'s own
+  comment: Bill generation was flat-only because `Community` had no
+  per-unit size field to vary it by). User's own scope: add the `Unit`
+  entity, and also rework Bill generation to bill by area — but keep flat
+  billing available too, since it's "practical in most cases" for most
+  communities.
+  - New `Unit` entity (community FK, unitNumber unique per community,
+    block/floor/unitType all optional, areaSqft optional `BigDecimal` —
+    not required at creation, only once a community actually switches to
+    `PER_AREA` billing), `UnitRepository`, `UnitRequest`/
+    `UnitUpdateRequest` (partial update, null = unchanged, same pattern
+    as `MemberProfileUpdateRequest`)/`UnitResponse`, `UnitService`
+    (create/list/get/update/deactivate — soft-deactivate only, same
+    precedent as `Amenity`/`Staff`/`Vendor`), five new endpoints.
+  - **`CommunityMember` gained an optional `unit` FK** alongside its
+    existing free-text `unitNumber` (unchanged since Phase 1) — linking a
+    structured `Unit` to a member is a separate, explicit admin action
+    (`PATCH .../members/{id}/unit`, syncs `unitNumber` from the Unit's
+    number too) rather than a required migration path, so communities
+    that never adopt structured units are completely unaffected.
+    `CommunityMemberResponse` gained a `unitId` field.
+  - **`Community` gained `billingMode` (`FLAT`/`PER_AREA`, defaults to
+    `FLAT` — both in the DB and as the Java field's default value, so
+    every existing/new community keeps today's behavior unless an admin
+    explicitly opts in) and `ratePerSqft`**, settable via
+    `PATCH .../billing-settings` (`FLAT` clears any stored rate; `PER_AREA`
+    400s if no rate is given). `CommunityResponse` gained both fields.
+  - **`BillService.generateBills` now branches on `billingMode`**: `FLAT`
+    is byte-for-byte the same behavior as every prior session (request
+    supplies one amount, applied to every ACTIVE member — confirmed by
+    the full 128-test suite passing unmodified before any new tests were
+    added); `PER_AREA` requires the request's `amount` to be *absent*
+    (400 if provided — the amount is derived from the community's own
+    rate, not repeated per call) and computes each member's amount as
+    `ratePerSqft x their linked unit's areaSqft` (`HALF_UP` to 2
+    decimals) — and rejects the whole batch (409, listing which members)
+    if any currently-ACTIVE member has no unit/area assigned yet, rather
+    than silently skipping or under-billing them.
+  - `V12__structured_units_and_area_billing.sql`: new `unit` table,
+    nullable `unit_id` FK on `community_member`, `billing_mode` (with a
+    CHECK constraint) + `rate_per_sqft` on `community`.
+  - 17 new unit tests (`UnitServiceTest` 9, plus 4 new `BillServiceTest`
+    cases for the PER_AREA path and 4 new `CommunityServiceTest` cases
+    for `updateBillingSettings`) — all pass, and all 128 pre-existing
+    tests continued passing unmodified. Full suite: 145/145 across the
+    seventeen service test classes; the one pre-existing DB-dependent
+    context test still needs a live Postgres.
+  - **Live-verified end-to-end** against the rebuilt dev container: `V12`
+    applied (`flyway_schema_history`/startup log confirms). Reused
+    community id 2 and its existing two test identities (admin member id
+    3, resident member id 4). Confirmed: non-admin unit create → 403;
+    admin creates two units (A-101 area 1000, B-202 area 1500.50) → 201
+    both; duplicate unit number → 409; resident list → 200 both units;
+    admin assigns each unit to a member → 200, `unitNumber` correctly
+    synced from the Unit; admin updates A-101's area to 1200.75 → 200;
+    billing-settings to `PER_AREA` with no rate → 400; non-admin
+    billing-settings → 403; billing-settings to `PER_AREA` with rate 2.50
+    → 200; bill generation with `amount` provided under `PER_AREA` → 400;
+    bill generation with no `amount` → 201, amounts correctly computed
+    (2.50 x 1200.75 = 3001.88, 2.50 x 1500.50 = 3751.25); registered a
+    genuine third identity, had them submit and get approved through the
+    real join-request flow (not test-only shortcuts) so a real ACTIVE
+    member with no unit assigned would exist, then confirmed bill
+    generation under `PER_AREA` correctly 409s listing that the new
+    member has no unit area; switched back to `FLAT` → 200, `ratePerSqft`
+    cleared to `null`; generated `FLAT` bills for a fresh period → 201,
+    same flat amount applied to all three members including the one with
+    no unit (confirming Phase 1-era free-text-only communities are
+    completely unaffected); non-admin unit update → 403; unit deactivate
+    → 200, deactivating again → 409; assigning an inactive unit to a
+    member → 409; no token → 401; nonexistent unit → 404.
 
 ### 2026-08-31 (14)
 

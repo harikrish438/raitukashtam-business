@@ -45,7 +45,9 @@ convention) — this file only covers what's specific to `mycommunity-service`.
   on the existing `expense` table (Phase 10) — the first migration to
   alter a pre-existing table's schema since `V2`; `V11` added
   `community_document` (Phase 11, metadata only — see Document storage
-  below). Phase 6 (Dashboard aggregation) added no migration — it's a
+  below); `V12` added the `unit` table plus a nullable `unit_id` FK on
+  `community_member` and `billing_mode`/`rate_per_sqft` on `community`
+  (Phase 12). Phase 6 (Dashboard aggregation) added no migration — it's a
   pure read-model over existing tables, no new schema. See auth-service's
   own Flyway convention (`baseline-on-migrate`/`baseline-version` in
   `application.yml`) — this service now follows the same pattern.
@@ -265,6 +267,31 @@ earlier.
   Deleting a document deletes both the S3 object and the metadata row —
   no soft-delete here (unlike `Amenity`/`Staff`/`Vendor`), since nothing
   else references a document by FK.
+- **Unit** (Phase 12, new 2026-09-01): community FK, unitNumber (unique
+  per community), block/floor/unitType (all optional), areaSqft (optional
+  `BigDecimal` — not required at creation, only once a community actually
+  switches to `PER_AREA` billing, checked at bill-generation time), active
+  (soft-deactivate only, same pattern as `Amenity`/`Staff`/`Vendor`).
+  ADMIN manages (`POST`/`PATCH`/`PATCH .../deactivate`), any ACTIVE member
+  browses (`GET` list/by-id). **`CommunityMember` gained an optional
+  `unit` FK** alongside its existing free-text `unitNumber` (unchanged
+  since Phase 1) — linking a structured Unit to a member is a separate,
+  explicit admin action (`PATCH .../members/{id}/unit`, which also syncs
+  `unitNumber` from the Unit's own number) rather than a required
+  migration, so a community that never adopts structured units is
+  completely unaffected. `Community` gained `billingMode` (`FLAT`/
+  `PER_AREA`, defaults to `FLAT` in both the DB and the Java entity —
+  every community keeps today's flat-amount behavior unless an admin
+  explicitly opts in, since flat is "practical in most cases") and
+  `ratePerSqft` (only meaningful in `PER_AREA` mode), settable via
+  `PATCH .../billing-settings`. `BillService.generateBills` branches on
+  `billingMode`: `FLAT` is unchanged from Phase 3 (the request supplies
+  one amount applied to every ACTIVE member); `PER_AREA` requires the
+  request's `amount` to be *absent* (400 if provided) and computes each
+  member's amount as `ratePerSqft x their linked unit's areaSqft`
+  (`HALF_UP` to 2 decimals) — 409s the whole batch, listing which
+  members, if any currently-ACTIVE member has no unit/area assigned yet,
+  rather than silently under-billing them.
 
 Endpoints (`/api/v1/communities`, all require a Bearer JWT):
 
@@ -274,10 +301,12 @@ Endpoints (`/api/v1/communities`, all require a Bearer JWT):
 | GET | `/api/v1/communities/mine` | Any authenticated caller; lists their own communities+role+status |
 | POST | `/api/v1/communities/members/activate-invitations` | Any authenticated caller; links any `INVITED` rows matching their real mobile number, returns the same shape as `/mine` |
 | GET | `/api/v1/communities/{id}` | Caller must be an ACTIVE member (any role) |
+| PATCH | `/api/v1/communities/{id}/billing-settings` | Caller must be an ACTIVE ADMIN; 400 if PER_AREA with no rate |
 | POST | `/api/v1/communities/{id}/members` | Caller must be an ACTIVE ADMIN; 409 on duplicate mobile in the same community; new member is `RESIDENT`/`INVITED` |
 | GET | `/api/v1/communities/{id}/members` | Caller must be an ACTIVE member |
 | PATCH | `/api/v1/communities/{id}/members/me` | Caller must be an ACTIVE member; updates own name/email/unitNumber |
 | DELETE | `/api/v1/communities/{id}/members/{memberId}` | Caller must be an ACTIVE ADMIN; 409 if it's the last ACTIVE ADMIN |
+| PATCH | `/api/v1/communities/{id}/members/{memberId}/unit` | Caller must be an ACTIVE ADMIN; links a structured Unit to the member and syncs unitNumber; 409 if the unit is inactive |
 | POST | `/api/v1/communities/{id}/join-requests` | Any authenticated caller not already an active member; 409 if already a member or a PENDING request exists |
 | GET | `/api/v1/communities/{id}/join-requests` | Caller must be an ACTIVE ADMIN; lists PENDING requests |
 | POST | `/api/v1/communities/{id}/join-requests/{reqId}/approve` | Caller must be an ACTIVE ADMIN; creates an ACTIVE RESIDENT member |
@@ -340,10 +369,14 @@ Endpoints (`/api/v1/communities`, all require a Bearer JWT):
 | GET | `/api/v1/communities/{id}/documents/{documentId}` | Caller must be an ACTIVE ADMIN, or visibility is `ALL_MEMBERS` |
 | GET | `/api/v1/communities/{id}/documents/{documentId}/download` | Same visibility rule as above; returns the raw file bytes |
 | DELETE | `/api/v1/communities/{id}/documents/{documentId}` | Caller must be an ACTIVE ADMIN; deletes the S3 object too |
+| POST | `/api/v1/communities/{id}/units` | Caller must be an ACTIVE ADMIN; 409 on duplicate unit number in the community |
+| GET | `/api/v1/communities/{id}/units` | Any ACTIVE member |
+| GET | `/api/v1/communities/{id}/units/{unitId}` | Any ACTIVE member |
+| PATCH | `/api/v1/communities/{id}/units/{unitId}` | Caller must be an ACTIVE ADMIN; partial update, null = unchanged |
+| PATCH | `/api/v1/communities/{id}/units/{unitId}/deactivate` | Caller must be an ACTIVE ADMIN; 409 if already inactive |
 
-A 13-phase roadmap for the remaining feature areas (structured units,
-committee/RWA, push notification delivery) was agreed with the user —
-see repo-root
+A 13-phase roadmap for the remaining feature areas (committee/RWA, push
+notification delivery) was agreed with the user — see repo-root
 `PROGRESS.md`'s 2026-08-31 session entry (5). The original full data
 model sketch for these is in `~/.claude/plans/validated-rolling-pizza.md`
 (from the session Phase 1 was planned in) or ask for it if that file

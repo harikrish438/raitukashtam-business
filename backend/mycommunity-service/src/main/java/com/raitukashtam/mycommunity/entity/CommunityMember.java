@@ -24,6 +24,11 @@ public class CommunityMember extends BaseEntity {
     @Column(name = "unit_number", nullable = false)
     private String unitNumber;
 
+    /** Nullable -- structured unit, set via ADMIN's PATCH .../members/{id}/unit once the community has Unit master data; unitNumber above stays the free-text field every member has had since Phase 1. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "unit_id")
+    private Unit unit;
+
     @Column(name = "mobile_number", nullable = false)
     private String mobileNumber;
 

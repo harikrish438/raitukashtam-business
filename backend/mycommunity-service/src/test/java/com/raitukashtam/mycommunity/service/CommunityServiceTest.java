@@ -2,6 +2,7 @@ package com.raitukashtam.mycommunity.service;
 
 import com.raitukashtam.mycommunity.client.AuthServiceClient;
 import com.raitukashtam.mycommunity.client.AuthUserProfile;
+import com.raitukashtam.mycommunity.entity.BillingMode;
 import com.raitukashtam.mycommunity.entity.Community;
 import com.raitukashtam.mycommunity.entity.CommunityMember;
 import com.raitukashtam.mycommunity.entity.CommunityRole;
@@ -11,6 +12,7 @@ import com.raitukashtam.mycommunity.exception.ResourceAlreadyExistsException;
 import com.raitukashtam.mycommunity.exception.ResourceNotFoundException;
 import com.raitukashtam.mycommunity.repository.CommunityMemberRepository;
 import com.raitukashtam.mycommunity.repository.CommunityRepository;
+import com.raitukashtam.mycommunity.request.BillingSettingsRequest;
 import com.raitukashtam.mycommunity.request.CommunityMemberRequest;
 import com.raitukashtam.mycommunity.request.CommunityRequest;
 import com.raitukashtam.mycommunity.request.MemberProfileUpdateRequest;
@@ -302,5 +304,82 @@ class CommunityServiceTest {
         assertThatThrownBy(() -> communityService.updateMyProfile(1L, request, CALLER_IDENTITY))
                 .isInstanceOf(ResponseStatusException.class);
         verify(communityMemberRepository, never()).save(any());
+    }
+
+    @Test
+    void updateBillingSettings_switchesToPerAreaWithRate_whenCallerIsAdmin() {
+        CommunityMember admin = new CommunityMember();
+        admin.setRole(CommunityRole.ADMIN);
+        admin.setCommunity(communityWithId(1L));
+        when(communityRepository.existsById(1L)).thenReturn(true);
+        when(communityMemberRepository.findByCommunity_IdAndIdentityIdAndStatus(1L, CALLER_IDENTITY, MemberStatus.ACTIVE))
+                .thenReturn(Optional.of(admin));
+        when(communityRepository.getReferenceById(1L)).thenReturn(communityWithId(1L));
+        when(communityRepository.save(any(Community.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        BillingSettingsRequest request = new BillingSettingsRequest();
+        request.setBillingMode(BillingMode.PER_AREA);
+        request.setRatePerSqft(new java.math.BigDecimal("2.50"));
+
+        CommunityResponse response = communityService.updateBillingSettings(1L, request, CALLER_IDENTITY);
+
+        assertThat(response.getBillingMode()).isEqualTo(BillingMode.PER_AREA);
+        assertThat(response.getRatePerSqft()).isEqualByComparingTo("2.50");
+    }
+
+    @Test
+    void updateBillingSettings_throwsBadRequest_whenPerAreaWithNoRate() {
+        CommunityMember admin = new CommunityMember();
+        admin.setRole(CommunityRole.ADMIN);
+        admin.setCommunity(communityWithId(1L));
+        when(communityRepository.existsById(1L)).thenReturn(true);
+        when(communityMemberRepository.findByCommunity_IdAndIdentityIdAndStatus(1L, CALLER_IDENTITY, MemberStatus.ACTIVE))
+                .thenReturn(Optional.of(admin));
+
+        BillingSettingsRequest request = new BillingSettingsRequest();
+        request.setBillingMode(BillingMode.PER_AREA);
+
+        assertThatThrownBy(() -> communityService.updateBillingSettings(1L, request, CALLER_IDENTITY))
+                .isInstanceOf(ResponseStatusException.class);
+        verify(communityRepository, never()).save(any());
+    }
+
+    @Test
+    void updateBillingSettings_switchingBackToFlat_clearsRate() {
+        CommunityMember admin = new CommunityMember();
+        admin.setRole(CommunityRole.ADMIN);
+        admin.setCommunity(communityWithId(1L));
+        when(communityRepository.existsById(1L)).thenReturn(true);
+        when(communityMemberRepository.findByCommunity_IdAndIdentityIdAndStatus(1L, CALLER_IDENTITY, MemberStatus.ACTIVE))
+                .thenReturn(Optional.of(admin));
+        Community existing = communityWithId(1L);
+        existing.setBillingMode(BillingMode.PER_AREA);
+        existing.setRatePerSqft(new java.math.BigDecimal("2.50"));
+        when(communityRepository.getReferenceById(1L)).thenReturn(existing);
+        when(communityRepository.save(any(Community.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        BillingSettingsRequest request = new BillingSettingsRequest();
+        request.setBillingMode(BillingMode.FLAT);
+
+        CommunityResponse response = communityService.updateBillingSettings(1L, request, CALLER_IDENTITY);
+
+        assertThat(response.getBillingMode()).isEqualTo(BillingMode.FLAT);
+        assertThat(response.getRatePerSqft()).isNull();
+    }
+
+    @Test
+    void updateBillingSettings_throwsAccessDenied_whenCallerNotAdmin() {
+        CommunityMember resident = new CommunityMember();
+        resident.setRole(CommunityRole.RESIDENT);
+        resident.setCommunity(communityWithId(1L));
+        when(communityRepository.existsById(1L)).thenReturn(true);
+        when(communityMemberRepository.findByCommunity_IdAndIdentityIdAndStatus(1L, CALLER_IDENTITY, MemberStatus.ACTIVE))
+                .thenReturn(Optional.of(resident));
+
+        BillingSettingsRequest request = new BillingSettingsRequest();
+        request.setBillingMode(BillingMode.FLAT);
+
+        assertThatThrownBy(() -> communityService.updateBillingSettings(1L, request, CALLER_IDENTITY))
+                .isInstanceOf(AccessDeniedException.class);
     }
 }

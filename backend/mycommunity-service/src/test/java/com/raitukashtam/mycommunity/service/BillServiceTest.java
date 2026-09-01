@@ -2,10 +2,12 @@ package com.raitukashtam.mycommunity.service;
 
 import com.raitukashtam.mycommunity.entity.Bill;
 import com.raitukashtam.mycommunity.entity.BillStatus;
+import com.raitukashtam.mycommunity.entity.BillingMode;
 import com.raitukashtam.mycommunity.entity.Community;
 import com.raitukashtam.mycommunity.entity.CommunityMember;
 import com.raitukashtam.mycommunity.entity.CommunityRole;
 import com.raitukashtam.mycommunity.entity.MemberStatus;
+import com.raitukashtam.mycommunity.entity.Unit;
 import com.raitukashtam.mycommunity.exception.ResourceAlreadyExistsException;
 import com.raitukashtam.mycommunity.exception.ResourceNotFoundException;
 import com.raitukashtam.mycommunity.repository.BillRepository;
@@ -18,6 +20,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -203,5 +206,119 @@ class BillServiceTest {
 
         assertThatThrownBy(() -> service.getBill(COMMUNITY_ID, 999L, CALLER_IDENTITY))
                 .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    private Community perAreaCommunity(BigDecimal ratePerSqft) {
+        Community community = community(COMMUNITY_ID);
+        community.setBillingMode(BillingMode.PER_AREA);
+        community.setRatePerSqft(ratePerSqft);
+        return community;
+    }
+
+    private CommunityMember memberWithUnit(Long id, CommunityRole role, BigDecimal areaSqft) {
+        CommunityMember member = member(id, role);
+        Unit unit = new Unit();
+        unit.setId(id + 900);
+        unit.setUnitNumber(member.getUnitNumber());
+        unit.setAreaSqft(areaSqft);
+        member.setUnit(unit);
+        return member;
+    }
+
+    @Test
+    void generateBills_computesPerMemberAmount_whenBillingModeIsPerArea() {
+        BillService service = buildService();
+        CommunityMember admin = memberWithUnit(5L, CommunityRole.ADMIN, new BigDecimal("1000.00"));
+        CommunityMember resident = memberWithUnit(6L, CommunityRole.RESIDENT, new BigDecimal("1500.00"));
+        when(communityRepository.existsById(COMMUNITY_ID)).thenReturn(true);
+        when(communityMemberRepository.findByCommunity_IdAndIdentityIdAndStatus(COMMUNITY_ID, CALLER_IDENTITY, MemberStatus.ACTIVE))
+                .thenReturn(Optional.of(admin));
+        when(billRepository.existsByCommunity_IdAndPeriod(COMMUNITY_ID, "2026-09")).thenReturn(false);
+        when(communityRepository.getReferenceById(COMMUNITY_ID)).thenReturn(perAreaCommunity(new BigDecimal("2.50")));
+        when(communityMemberRepository.findByCommunity_IdAndStatus(COMMUNITY_ID, MemberStatus.ACTIVE))
+                .thenReturn(List.of(admin, resident));
+        when(billRepository.saveAll(anyList())).thenAnswer(invocation -> {
+            List<Bill> bills = invocation.getArgument(0);
+            long id = 200L;
+            for (Bill bill : bills) {
+                bill.setId(id++);
+            }
+            return bills;
+        });
+
+        GenerateBillsRequest request = new GenerateBillsRequest();
+        request.setPeriod("2026-09");
+        request.setDueDate(LocalDate.of(2026, 9, 10));
+
+        List<BillResponse> responses = service.generateBills(COMMUNITY_ID, request, CALLER_IDENTITY);
+
+        assertThat(responses).hasSize(2);
+        assertThat(responses).filteredOn(r -> r.getMemberId().equals(5L)).first()
+                .satisfies(r -> assertThat(r.getAmount()).isEqualByComparingTo("2500.00"));
+        assertThat(responses).filteredOn(r -> r.getMemberId().equals(6L)).first()
+                .satisfies(r -> assertThat(r.getAmount()).isEqualByComparingTo("3750.00"));
+    }
+
+    @Test
+    void generateBills_throwsBadRequest_whenPerAreaAndAmountProvided() {
+        BillService service = buildService();
+        CommunityMember admin = memberWithUnit(5L, CommunityRole.ADMIN, new BigDecimal("1000.00"));
+        when(communityRepository.existsById(COMMUNITY_ID)).thenReturn(true);
+        when(communityMemberRepository.findByCommunity_IdAndIdentityIdAndStatus(COMMUNITY_ID, CALLER_IDENTITY, MemberStatus.ACTIVE))
+                .thenReturn(Optional.of(admin));
+        when(billRepository.existsByCommunity_IdAndPeriod(COMMUNITY_ID, "2026-09")).thenReturn(false);
+        when(communityRepository.getReferenceById(COMMUNITY_ID)).thenReturn(perAreaCommunity(new BigDecimal("2.50")));
+        when(communityMemberRepository.findByCommunity_IdAndStatus(COMMUNITY_ID, MemberStatus.ACTIVE))
+                .thenReturn(List.of(admin));
+
+        assertThatThrownBy(() -> service.generateBills(COMMUNITY_ID, generateRequest(), CALLER_IDENTITY))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("must not be provided");
+        verify(billRepository, never()).saveAll(anyList());
+    }
+
+    @Test
+    void generateBills_throwsConflict_whenPerAreaAndMemberHasNoUnitArea() {
+        BillService service = buildService();
+        CommunityMember admin = memberWithUnit(5L, CommunityRole.ADMIN, new BigDecimal("1000.00"));
+        CommunityMember residentWithoutUnit = member(6L, CommunityRole.RESIDENT);
+        when(communityRepository.existsById(COMMUNITY_ID)).thenReturn(true);
+        when(communityMemberRepository.findByCommunity_IdAndIdentityIdAndStatus(COMMUNITY_ID, CALLER_IDENTITY, MemberStatus.ACTIVE))
+                .thenReturn(Optional.of(admin));
+        when(billRepository.existsByCommunity_IdAndPeriod(COMMUNITY_ID, "2026-09")).thenReturn(false);
+        when(communityRepository.getReferenceById(COMMUNITY_ID)).thenReturn(perAreaCommunity(new BigDecimal("2.50")));
+        when(communityMemberRepository.findByCommunity_IdAndStatus(COMMUNITY_ID, MemberStatus.ACTIVE))
+                .thenReturn(List.of(admin, residentWithoutUnit));
+
+        GenerateBillsRequest request = new GenerateBillsRequest();
+        request.setPeriod("2026-09");
+        request.setDueDate(LocalDate.of(2026, 9, 10));
+
+        assertThatThrownBy(() -> service.generateBills(COMMUNITY_ID, request, CALLER_IDENTITY))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("no unit area assigned");
+        verify(billRepository, never()).saveAll(anyList());
+    }
+
+    @Test
+    void generateBills_throwsBadRequest_whenFlatAndAmountMissing() {
+        BillService service = buildService();
+        CommunityMember admin = member(5L, CommunityRole.ADMIN);
+        when(communityRepository.existsById(COMMUNITY_ID)).thenReturn(true);
+        when(communityMemberRepository.findByCommunity_IdAndIdentityIdAndStatus(COMMUNITY_ID, CALLER_IDENTITY, MemberStatus.ACTIVE))
+                .thenReturn(Optional.of(admin));
+        when(billRepository.existsByCommunity_IdAndPeriod(COMMUNITY_ID, "2026-09")).thenReturn(false);
+        when(communityRepository.getReferenceById(COMMUNITY_ID)).thenReturn(community(COMMUNITY_ID));
+        when(communityMemberRepository.findByCommunity_IdAndStatus(COMMUNITY_ID, MemberStatus.ACTIVE))
+                .thenReturn(List.of(admin));
+
+        GenerateBillsRequest request = new GenerateBillsRequest();
+        request.setPeriod("2026-09");
+        request.setDueDate(LocalDate.of(2026, 9, 10));
+
+        assertThatThrownBy(() -> service.generateBills(COMMUNITY_ID, request, CALLER_IDENTITY))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("Amount is required");
+        verify(billRepository, never()).saveAll(anyList());
     }
 }

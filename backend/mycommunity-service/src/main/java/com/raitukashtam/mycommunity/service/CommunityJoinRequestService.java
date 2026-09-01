@@ -110,7 +110,7 @@ public class CommunityJoinRequestService {
         joinRequest.setStatus(JoinRequestStatus.APPROVED);
         joinRequestRepository.save(joinRequest);
 
-        return toMemberResponse(savedMember);
+        return communityService.toResponse(savedMember);
     }
 
     @Transactional
@@ -138,18 +138,5 @@ public class CommunityJoinRequestService {
                 joinRequest.getRequesterMobileNumber(),
                 joinRequest.getStatus(),
                 joinRequest.getCreatedAt());
-    }
-
-    private CommunityMemberResponse toMemberResponse(CommunityMember member) {
-        return new CommunityMemberResponse(
-                member.getId(),
-                member.getCommunity().getId(),
-                member.getName(),
-                member.getUnitNumber(),
-                member.getMobileNumber(),
-                member.getEmail(),
-                member.getRole(),
-                member.getStatus(),
-                member.getCreatedAt());
     }
 }
