@@ -96,7 +96,17 @@ one amount for every member); `PER_AREA` computes each member's amount
 from `ratePerSqft x their linked unit's areaSqft` and rejects the whole
 batch (409) if any currently-ACTIVE member has no unit/area assigned
 yet, rather than silently under-billing them — see the 2026-09-01
-session entry.
+session entry. That same day, `mycommunity-service` also gained
+**Phase 13 (Committee/RWA)**: a directory + term-tracking layer only —
+a `CommitteeMember` seat is layered on an existing ADMIN/RESIDENT
+`CommunityMember` and grants no extra authorization, keeping the
+two-role model intact. Position is a closed enum (President/Vice
+President/Secretary/Joint Secretary/Treasurer/Committee Member/Other +
+free text) with `termStart`/`termEnd` (null = current); ADMIN manages
+(appoint/end-term), any ACTIVE member browses the directory and full
+history. One current position per member enforced at both the service
+and DB level (partial unique index) — see the second 2026-09-01 session
+entry.
 auth-service also gained a self-service `PATCH /users/me` (firstName/
 lastName/email, partial update) — the account-level counterpart to
 mycommunity-service's own member-profile update, closing a gap surfaced
@@ -110,16 +120,14 @@ the 2026-08-31 session entry (4).
 
 ## Open items / next steps
 
-- Build the remaining `mycommunity-service` phases (committee/RWA, then
-  push-notification delivery once the mobile app has real networking —
-  see the full phased roadmap agreed with the user in the 2026-08-31
-  session entry (5)). Announcements (Phase 2), Maintenance & Billing
-  generation+status (Phase 3), Payments (Phase 4), Expenses (Phase 5),
-  Dashboard aggregation (Phase 6), Visitors (Phase 7), Amenities
-  (Phase 8), Helpdesk/Complaints (Phase 9), Staff & Vendor management
-  (Phase 10), Community Documents (Phase 11), and Structured units +
-  area-based billing (Phase 12) are now done. Full data model for the
-  rest already designed, see the 2026-08-28 session entry below.
+- Build the remaining `mycommunity-service` phase: push-notification
+  delivery, once the mobile app has real networking — see the full
+  phased roadmap agreed with the user in the 2026-08-31 session entry
+  (5). Every other phase in that roadmap (Announcements, Maintenance &
+  Billing, Payments, Expenses, Dashboard aggregation, Visitors,
+  Amenities, Helpdesk/Complaints, Staff & Vendor management, Community
+  Documents, Structured units + area-based billing, and Committee/RWA)
+  is now done.
 - **Production S3 bucket doesn't exist yet** — Phase 11 (Documents) is
   built and live-verified against LocalStack in dev only.
   `.env.test.example`/`.env.prod.example` have placeholder AWS IAM
@@ -189,6 +197,84 @@ the 2026-08-31 session entry (4).
   accepted v1 limitation in the implementation plan, not solved.
 
 ## Sessions
+
+### 2026-09-01 (2)
+
+- **Built `mycommunity-service` Phase 13: Committee/RWA**, the last item
+  on the 2026-08-31 roadmap besides push notifications. User's own scope
+  when asked to pick between this and Phase 12: "committee/RWA next"
+  (after Phase 12 shipped).
+  - **Scoped as a directory + term-tracking layer only, not a new
+    authorization tier** — stated up front rather than asked, since it's
+    a design call within delegated scope, not an infra/cost fork: a
+    `CommitteeMember` seat is layered on an existing `CommunityMember`
+    (ADMIN or RESIDENT) and grants no extra permissions in this phase.
+    Reasoning: every existing service's authorization already hard-codes
+    the two-role model (`requireActiveAdmin`/`requireActiveMember`);
+    giving committee members elevated capabilities would be a real
+    architecture change touching every service, not an addition, and
+    nothing in the `mysociety` app (confirmed via the fork from the
+    prior session — no committee/election/voting/office-bearer code
+    anywhere) pulls toward that. Can be added as its own later phase if
+    ever needed.
+  - New `CommitteeMember` entity (community FK, member FK →
+    `CommunityMember`, position enum `PRESIDENT`/`VICE_PRESIDENT`/
+    `SECRETARY`/`JOINT_SECRETARY`/`TREASURER`/`COMMITTEE_MEMBER`/`OTHER`
+    + free-text `customPosition` required only for `OTHER` — same
+    closed-set-plus-OTHER pattern as `Visitor.type`, termStart, termEnd
+    nullable = current/ongoing), `CommitteeMemberRepository`,
+    `CommitteeMemberRequest`/`CommitteeMemberResponse` (the response
+    includes a derived `current` boolean), `CommitteeService`, five new
+    endpoints on `CommunityController`
+    (`POST`/`GET` current/`GET` history/`GET` one/`PATCH end-term`),
+    `V13__committee.sql`.
+  - **ADMIN manages (appoint/end-term), any ACTIVE member browses** —
+    unlike Staff/Vendor (ADMIN-only end to end, no app screen drives
+    them), a committee roster is inherently member-facing information
+    (who's the President/Secretary), closer to Announcements than to
+    back-office data.
+  - **One current position per member, enforced twice**: in
+    `CommitteeService.createCommitteeMember` (409 via
+    `existsByMember_IdAndTermEndIsNull`) and, since a service-level check
+    alone can race, at the DB level too — a partial unique index
+    (`WHERE term_end IS NULL`) on `member_id`, same technique
+    `community_join_request`'s "at most one PENDING request per identity"
+    constraint already used. **Not enforced**: only-one-holder-per-
+    position (e.g. two concurrent "President"s) — deliberately out of
+    scope, noted as a v1 limitation rather than silently assumed away.
+  - No hard delete — matches the Amenity/Staff/Vendor/Unit precedent;
+    correcting a mistaken appointment is done via `end-term` (which can
+    be immediately followed by a corrected re-appointment, as
+    live-verified below), not deletion.
+  - 8 new unit tests (`CommitteeServiceTest`) — all pass. Full suite:
+    153/153 across the eighteen service test classes; the one
+    pre-existing DB-dependent context test still needs a live Postgres.
+  - **Live-verified end-to-end** against the rebuilt dev container: `V13`
+    applied (startup log confirms). Reused community id 2 and its three
+    existing test members (admin id 3, resident id 4, a third resident id
+    5 from the prior session's join-request test). Confirmed: non-admin
+    appoint → 403; `OTHER` position with no `customPosition` → 400;
+    appointing a nonexistent member → 404; admin appoints member 3 as
+    PRESIDENT, member 4 as SECRETARY, member 5 as OTHER/"Cultural
+    Coordinator" → 201 all three; appointing member 4 again while their
+    SECRETARY term is still current → 409; resident `GET` current
+    committee → 200, all three; resident `GET` history → 200, same
+    three (nothing ended yet); resident `GET` one by id → 200;
+    nonexistent committee id → 404; no token → 401; non-admin end-term →
+    403; admin ends member 4's SECRETARY term → 200, `termEnd` set to
+    today, `current:false`; ending again → 409; **member 4 immediately
+    re-appointed as TREASURER → 201**, proving the "one current position"
+    guard correctly permits a new appointment once the old one has ended
+    (both the service check and the partial unique index allowed it);
+    current-committee list afterward correctly excludes the ended
+    SECRETARY row while still showing 3 current entries (President,
+    Cultural Coordinator, new Treasurer); full history correctly grew to
+    4 entries including the ended SECRETARY row; also confirmed the
+    `/committee/history` literal route resolves correctly rather than
+    being swallowed by the `/committee/{committeeMemberId}` variable
+    route at the same path depth (Spring's literal-over-variable
+    precedence, same shape already proven by `/documents/{id}/download`
+    elsewhere in this controller).
 
 ### 2026-09-01
 

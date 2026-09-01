@@ -47,7 +47,9 @@ convention) — this file only covers what's specific to `mycommunity-service`.
   `community_document` (Phase 11, metadata only — see Document storage
   below); `V12` added the `unit` table plus a nullable `unit_id` FK on
   `community_member` and `billing_mode`/`rate_per_sqft` on `community`
-  (Phase 12). Phase 6 (Dashboard aggregation) added no migration — it's a
+  (Phase 12); `V13` added the `committee_member` table, including a
+  partial unique index enforcing one current position per member
+  (Phase 13). Phase 6 (Dashboard aggregation) added no migration — it's a
   pure read-model over existing tables, no new schema. See auth-service's
   own Flyway convention (`baseline-on-migrate`/`baseline-version` in
   `application.yml`) — this service now follows the same pattern.
@@ -292,6 +294,30 @@ earlier.
   (`HALF_UP` to 2 decimals) — 409s the whole batch, listing which
   members, if any currently-ACTIVE member has no unit/area assigned yet,
   rather than silently under-billing them.
+- **CommitteeMember** (Phase 13, new 2026-09-01): community FK, member FK
+  → `CommunityMember` (an existing ADMIN or RESIDENT — **this seat grants
+  no extra authorization**, it's directory/term data only; every
+  service's authorization still only knows ADMIN/RESIDENT), position
+  (enum `PRESIDENT`/`VICE_PRESIDENT`/`SECRETARY`/`JOINT_SECRETARY`/
+  `TREASURER`/`COMMITTEE_MEMBER`/`OTHER` + free-text `customPosition`
+  required only for `OTHER`, same closed-set-plus-OTHER pattern as
+  `Visitor.type`), termStart, termEnd (nullable = current/ongoing).
+  **ADMIN manages (appoint/end-term), any ACTIVE member browses** — a
+  committee roster is member-facing (closer to Announcements than to
+  Staff/Vendor's back-office data, which no app screen drives).
+  `POST .../committee` 400s if `OTHER` with no `customPosition`, 404s if
+  the target member doesn't exist in this community, 409s if that member
+  already holds a current (unended) position — enforced both in the
+  service and via a partial unique index (`WHERE term_end IS NULL`) on
+  `member_id`, same technique `community_join_request`'s "at most one
+  PENDING request" constraint uses.
+  `PATCH .../committee/{id}/end-term` sets `termEnd` to today (409 if
+  already ended); a member can be re-appointed to a new position
+  immediately afterward. No hard delete — same precedent as
+  `Amenity`/`Staff`/`Vendor`/`Unit`; correcting a mistaken appointment is
+  done via `end-term` + re-appointment. **Not enforced**: only-one-holder-
+  per-position (e.g. two concurrent Presidents) — a stated v1 limitation,
+  not built.
 
 Endpoints (`/api/v1/communities`, all require a Bearer JWT):
 
@@ -374,9 +400,16 @@ Endpoints (`/api/v1/communities`, all require a Bearer JWT):
 | GET | `/api/v1/communities/{id}/units/{unitId}` | Any ACTIVE member |
 | PATCH | `/api/v1/communities/{id}/units/{unitId}` | Caller must be an ACTIVE ADMIN; partial update, null = unchanged |
 | PATCH | `/api/v1/communities/{id}/units/{unitId}/deactivate` | Caller must be an ACTIVE ADMIN; 409 if already inactive |
+| POST | `/api/v1/communities/{id}/committee` | Caller must be an ACTIVE ADMIN; 400 if OTHER with no customPosition, 409 if the member already holds a current position |
+| GET | `/api/v1/communities/{id}/committee` | Any ACTIVE member; current (unended) positions only |
+| GET | `/api/v1/communities/{id}/committee/history` | Any ACTIVE member; full history including ended terms |
+| GET | `/api/v1/communities/{id}/committee/{committeeMemberId}` | Any ACTIVE member |
+| PATCH | `/api/v1/communities/{id}/committee/{committeeMemberId}/end-term` | Caller must be an ACTIVE ADMIN; sets termEnd to today; 409 if already ended |
 
-A 13-phase roadmap for the remaining feature areas (committee/RWA, push
-notification delivery) was agreed with the user — see repo-root
+A 13-phase roadmap was agreed with the user for this service's feature
+areas — every phase is now built except push notification delivery
+(blocked on the mobile app's own networking code, see Known gaps below).
+See repo-root
 `PROGRESS.md`'s 2026-08-31 session entry (5). The original full data
 model sketch for these is in `~/.claude/plans/validated-rolling-pizza.md`
 (from the session Phase 1 was planned in) or ask for it if that file

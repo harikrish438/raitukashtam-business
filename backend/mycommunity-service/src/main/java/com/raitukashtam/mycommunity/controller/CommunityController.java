@@ -6,6 +6,7 @@ import com.raitukashtam.mycommunity.request.AnnouncementRequest;
 import com.raitukashtam.mycommunity.request.AssignComplaintRequest;
 import com.raitukashtam.mycommunity.request.AssignUnitRequest;
 import com.raitukashtam.mycommunity.request.BillingSettingsRequest;
+import com.raitukashtam.mycommunity.request.CommitteeMemberRequest;
 import com.raitukashtam.mycommunity.request.CommunityMemberRequest;
 import com.raitukashtam.mycommunity.request.CommunityRequest;
 import com.raitukashtam.mycommunity.request.ComplaintCommentRequest;
@@ -27,6 +28,7 @@ import com.raitukashtam.mycommunity.response.AmenityBookingResponse;
 import com.raitukashtam.mycommunity.response.AmenityResponse;
 import com.raitukashtam.mycommunity.response.AnnouncementResponse;
 import com.raitukashtam.mycommunity.response.BillResponse;
+import com.raitukashtam.mycommunity.response.CommitteeMemberResponse;
 import com.raitukashtam.mycommunity.response.CommunityMemberResponse;
 import com.raitukashtam.mycommunity.response.CommunityResponse;
 import com.raitukashtam.mycommunity.response.ComplaintCommentResponse;
@@ -47,6 +49,7 @@ import com.raitukashtam.mycommunity.service.AmenityBookingService;
 import com.raitukashtam.mycommunity.service.AmenityService;
 import com.raitukashtam.mycommunity.service.AnnouncementService;
 import com.raitukashtam.mycommunity.service.BillService;
+import com.raitukashtam.mycommunity.service.CommitteeService;
 import com.raitukashtam.mycommunity.service.CommunityJoinRequestService;
 import com.raitukashtam.mycommunity.service.CommunityService;
 import com.raitukashtam.mycommunity.service.ComplaintCommentService;
@@ -129,6 +132,9 @@ public class CommunityController {
 
     @Autowired
     private UnitService unitService;
+
+    @Autowired
+    private CommitteeService committeeService;
 
     @PostMapping
     public ResponseEntity<CommunityResponse> createCommunity(@RequestBody @Validated CommunityRequest request,
@@ -751,5 +757,44 @@ public class CommunityController {
         log.info("Inside deleteDocument method of CommunityController");
         documentService.deleteDocument(communityId, documentId, jwt.getSubject());
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{communityId}/committee")
+    public ResponseEntity<CommitteeMemberResponse> createCommitteeMember(@PathVariable("communityId") Long communityId,
+                                                                           @RequestBody @Validated CommitteeMemberRequest request,
+                                                                           @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside createCommitteeMember method of CommunityController");
+        return new ResponseEntity<>(
+                committeeService.createCommitteeMember(communityId, request, jwt.getSubject()), HttpStatus.CREATED);
+    }
+
+    @GetMapping("/{communityId}/committee")
+    public List<CommitteeMemberResponse> listCurrentCommittee(@PathVariable("communityId") Long communityId,
+                                                                @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside listCurrentCommittee method of CommunityController");
+        return committeeService.listCurrentCommittee(communityId, jwt.getSubject());
+    }
+
+    @GetMapping("/{communityId}/committee/history")
+    public List<CommitteeMemberResponse> listCommitteeHistory(@PathVariable("communityId") Long communityId,
+                                                                @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside listCommitteeHistory method of CommunityController");
+        return committeeService.listCommitteeHistory(communityId, jwt.getSubject());
+    }
+
+    @GetMapping("/{communityId}/committee/{committeeMemberId}")
+    public CommitteeMemberResponse getCommitteeMember(@PathVariable("communityId") Long communityId,
+                                                        @PathVariable("committeeMemberId") Long committeeMemberId,
+                                                        @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside getCommitteeMember method of CommunityController");
+        return committeeService.getCommitteeMember(communityId, committeeMemberId, jwt.getSubject());
+    }
+
+    @PatchMapping("/{communityId}/committee/{committeeMemberId}/end-term")
+    public CommitteeMemberResponse endTerm(@PathVariable("communityId") Long communityId,
+                                            @PathVariable("committeeMemberId") Long committeeMemberId,
+                                            @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside endTerm method of CommunityController");
+        return committeeService.endTerm(communityId, committeeMemberId, jwt.getSubject());
     }
 }
