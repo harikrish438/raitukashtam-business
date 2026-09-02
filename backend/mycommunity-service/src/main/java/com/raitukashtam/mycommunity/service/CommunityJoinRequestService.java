@@ -51,6 +51,9 @@ public class CommunityJoinRequestService {
     @Autowired
     private AuthServiceClient authServiceClient;
 
+    @Autowired
+    private NotificationService notificationService;
+
     @Transactional
     public JoinRequestResponse createJoinRequest(Long communityId, JoinRequestRequest request, String callerIdentityId, String callerToken) {
         Community community = communityRepository.findById(communityId)
@@ -110,6 +113,9 @@ public class CommunityJoinRequestService {
         joinRequest.setStatus(JoinRequestStatus.APPROVED);
         joinRequestRepository.save(joinRequest);
 
+        notificationService.notifyIdentity(joinRequest.getRequesterIdentityId(),
+                "Join request approved", "Your request to join " + joinRequest.getCommunity().getName() + " was approved.");
+
         return communityService.toResponse(savedMember);
     }
 
@@ -119,6 +125,9 @@ public class CommunityJoinRequestService {
         CommunityJoinRequest joinRequest = requirePendingRequest(communityId, requestId);
         joinRequest.setStatus(JoinRequestStatus.REJECTED);
         joinRequestRepository.save(joinRequest);
+
+        notificationService.notifyIdentity(joinRequest.getRequesterIdentityId(),
+                "Join request declined", "Your request to join " + joinRequest.getCommunity().getName() + " was declined.");
     }
 
     private CommunityJoinRequest requirePendingRequest(Long communityId, Long requestId) {

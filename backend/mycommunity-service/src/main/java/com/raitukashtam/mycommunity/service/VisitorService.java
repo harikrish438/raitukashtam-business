@@ -41,6 +41,9 @@ public class VisitorService {
     @Autowired
     private CommunityService communityService;
 
+    @Autowired
+    private NotificationService notificationService;
+
     @Transactional
     public VisitorResponse createVisitor(Long communityId, CreateVisitorRequest request, String callerIdentityId) {
         CommunityMember host = communityService.requireActiveMember(communityId, callerIdentityId);
@@ -97,7 +100,14 @@ public class VisitorService {
         }
         visitor.setStatus(VisitorStatus.CHECKED_IN);
         visitor.setEntryTime(LocalDateTime.now());
-        return toResponse(visitorRepository.save(visitor));
+        Visitor saved = visitorRepository.save(visitor);
+
+        if (!visitor.getHost().getId().equals(caller.getId())) {
+            notificationService.notifyIdentity(visitor.getHost().getIdentityId(),
+                    "Visitor arrived", visitor.getGuestName() + " has checked in.");
+        }
+
+        return toResponse(saved);
     }
 
     @Transactional

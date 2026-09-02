@@ -65,6 +65,10 @@ services:
       TWOFACTOR_API_KEY: ${TWOFACTOR_API_KEY:?TWOFACTOR_API_KEY is required in .env}
       MYCOMMUNITY_AWS_ACCESS_KEY_ID: ${MYCOMMUNITY_AWS_ACCESS_KEY_ID:?MYCOMMUNITY_AWS_ACCESS_KEY_ID is required in .env}
       MYCOMMUNITY_AWS_SECRET_ACCESS_KEY: ${MYCOMMUNITY_AWS_SECRET_ACCESS_KEY:?MYCOMMUNITY_AWS_SECRET_ACCESS_KEY is required in .env}
+      # Deliberately NOT :?required -- empty means "no Firebase project
+      # yet," which FirebaseConfig/NotificationService already handle by
+      # logging instead of sending, so it's fine for this to be unset.
+      MYCOMMUNITY_FIREBASE_CREDENTIALS_JSON: ${MYCOMMUNITY_FIREBASE_CREDENTIALS_JSON:-}
     volumes:
       - ./infra/vault/vault-init.sh:/vault-init.sh:ro
     entrypoint: ["/bin/sh", "/vault-init.sh"]

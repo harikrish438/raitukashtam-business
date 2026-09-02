@@ -22,6 +22,7 @@ vault kv put secret/auth-service \
 vault kv put secret/mycommunity-service \
   "spring.datasource.password=${MYCOMMUNITY_DB_PASSWORD}" \
   "aws.s3.access-key=${MYCOMMUNITY_AWS_ACCESS_KEY_ID}" \
-  "aws.s3.secret-key=${MYCOMMUNITY_AWS_SECRET_ACCESS_KEY}"
+  "aws.s3.secret-key=${MYCOMMUNITY_AWS_SECRET_ACCESS_KEY}" \
+  "firebase.credentials-json=${MYCOMMUNITY_FIREBASE_CREDENTIALS_JSON}"
 
 echo "Vault secrets initialized successfully."

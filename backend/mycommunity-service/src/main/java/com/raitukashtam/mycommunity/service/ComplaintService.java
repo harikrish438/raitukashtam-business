@@ -49,6 +49,9 @@ public class ComplaintService {
     @Autowired
     private CommunityService communityService;
 
+    @Autowired
+    private NotificationService notificationService;
+
     @Transactional
     public ComplaintResponse createComplaint(Long communityId, ComplaintRequest request, String callerIdentityId) {
         CommunityMember raiser = communityService.requireActiveMember(communityId, callerIdentityId);
@@ -98,7 +101,12 @@ public class ComplaintService {
         CommunityMember assignee = communityMemberRepository.findByIdAndCommunity_Id(request.getAssigneeMemberId(), communityId)
                 .orElseThrow(() -> new ResourceNotFoundException("Member not found with id: " + request.getAssigneeMemberId()));
         complaint.setAssignedTo(assignee);
-        return toResponse(complaintRepository.save(complaint));
+        Complaint saved = complaintRepository.save(complaint);
+
+        notificationService.notifyIdentity(assignee.getIdentityId(),
+                "Complaint assigned to you", complaint.getTitle());
+
+        return toResponse(saved);
     }
 
     @Transactional
@@ -113,7 +121,12 @@ public class ComplaintService {
                     "Cannot move status from " + current + " to " + target + " -- must advance one step at a time");
         }
         complaint.setStatus(target);
-        return toResponse(complaintRepository.save(complaint));
+        Complaint saved = complaintRepository.save(complaint);
+
+        notificationService.notifyIdentity(complaint.getRaisedBy().getIdentityId(),
+                "Complaint update", "\"" + complaint.getTitle() + "\" is now " + target + ".");
+
+        return toResponse(saved);
     }
 
     private void requireVisible(Complaint complaint, CommunityMember caller) {

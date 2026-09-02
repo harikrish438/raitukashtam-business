@@ -106,7 +106,18 @@ free text) with `termStart`/`termEnd` (null = current); ADMIN manages
 (appoint/end-term), any ACTIVE member browses the directory and full
 history. One current position per member enforced at both the service
 and DB level (partial unique index) — see the second 2026-09-01 session
-entry.
+entry. Also that same day, **Phase 14 (Push notifications, backend
+side)**: a `DeviceToken` registry (`/api/v1/notifications/devices`,
+identity-scoped, its own controller — not community-scoped like
+everything else) and a `NotificationService` wired into six existing
+services (Announcements, Payments, Join requests, Visitors, Complaints,
+Amenity bookings) sending via Firebase Cloud Messaging, `@Async` so
+delivery never blocks a request. Deliberately built with a real Firebase
+project not yet provisioned (needs the user's own Google login) — when
+unconfigured, sends are logged instead of failing, live-verified working
+exactly as designed, and will start actually delivering the moment real
+credentials are set — see the third 2026-09-01 session entry. This
+completes every phase of the 2026-08-31 roadmap.
 auth-service also gained a self-service `PATCH /users/me` (firstName/
 lastName/email, partial update) — the account-level counterpart to
 mycommunity-service's own member-profile update, closing a gap surfaced
@@ -120,27 +131,27 @@ the 2026-08-31 session entry (4).
 
 ## Open items / next steps
 
-- Build the remaining `mycommunity-service` phase: push-notification
-  delivery, once the mobile app has real networking — see the full
-  phased roadmap agreed with the user in the 2026-08-31 session entry
-  (5). Every other phase in that roadmap (Announcements, Maintenance &
-  Billing, Payments, Expenses, Dashboard aggregation, Visitors,
-  Amenities, Helpdesk/Complaints, Staff & Vendor management, Community
-  Documents, Structured units + area-based billing, and Committee/RWA)
-  is now done.
+- **All 14 phases of the `mycommunity-service` roadmap are now built**
+  (see the full phased roadmap agreed with the user in the 2026-08-31
+  session entry (5)) — Phase 14 (push notifications) landed 2026-09-01,
+  backend-complete. What's left is infra, not code: a real Firebase
+  project (needs the user's own Google login) and the mobile app's own
+  FCM SDK integration (it has no networking code at all yet — see
+  below). Until then `NotificationService` logs what it would send
+  instead of delivering anything real; see the 2026-09-01 session entry.
 - **Production S3 bucket doesn't exist yet** — Phase 11 (Documents) is
   built and live-verified against LocalStack in dev only.
   `.env.test.example`/`.env.prod.example` have placeholder AWS IAM
   credentials, same as every other prod secret in this repo — actually
   provisioning a real S3 bucket + least-privilege IAM user for test/prod
   is part of the still-undecided AWS deploy pipeline work below, not done.
-- **Push notification delivery is explicitly out of scope for now** —
-  discussed with the user when scoping Announcements: needs FCM
-  integration, a device-token registration endpoint, and (blocking)
-  networking code in the mobile app, which doesn't exist yet. Deferred to
-  its own later phase rather than bolted onto any single feature, since
-  every future feature (bills due, visitor arrived, join-request
-  approved) would want it too.
+- **No real Firebase project exists yet** — same category as the S3
+  bucket above: `MYCOMMUNITY_FIREBASE_CREDENTIALS_JSON` is an empty
+  placeholder in every `.env*.example` file. Provisioning one (Firebase
+  console project + service-account JSON, needs the user's own Google
+  login) is the only remaining step to make Phase 14's push
+  notifications actually deliver, once the mobile app can also receive
+  them.
 - **Mobile app has no networking/PKCE client code at all** (confirmed by
   reading every screen — `OtpActivity.verifyOtp()` is just a `TODO` that
   navigates straight to the dashboard). The backend side is now ready
@@ -201,6 +212,102 @@ the 2026-08-31 session entry (4).
   accepted v1 limitation in the implementation plan, not solved.
 
 ## Sessions
+
+### 2026-09-01 (3)
+
+- **Built `mycommunity-service` Phase 14: Push notifications** (backend
+  side), the last item on the 2026-08-31 roadmap. User asked "let's build
+  push notifications" after a discussion of what FCM is, its selling
+  points, and its one real one-time cost (Apple's $99/yr developer
+  program for iOS — irrelevant today, Android-only). Before writing code,
+  confirmed one real fork with the user via `AskUserQuestion` — I can't
+  create a Firebase project or generate credentials myself (needs the
+  user's own Google login, no CLI/API path from this session) — and no
+  LocalStack-style local stand-in exists for FCM the way it did for S3 in
+  Phase 11. **User chose: build now with graceful no-op sending**, real
+  credentials to follow later.
+  - **Design decisions stated up front** (not asked — none were real
+    infra/cost forks): lives in `mycommunity-service`, not auth-service
+    (every trigger event lives here already); a new `NotificationController`
+    at `/api/v1/notifications`, not folded into `CommunityController`,
+    since a device token is identity-scoped, not community-scoped (one
+    person's device works across every community); `DevicePlatform` enum
+    with only `ANDROID` for now (no iOS app exists); delivery is
+    `@Async` so a triggering request never blocks on it.
+  - New `DeviceToken` entity (identityId, deviceId, fcmToken — never
+    serialized in responses, platform), unique on (identityId, deviceId)
+    — registering an already-known pair upserts rather than duplicating,
+    since a real app re-registers on every launch/token refresh.
+    `DeviceTokenRepository`, `RegisterDeviceRequest`/`DeviceTokenResponse`,
+    `DeviceTokenService`, `NotificationController` (register/list/
+    unregister, self-service only), `V14__device_token.sql`.
+  - **`NotificationService`**: `notifyIdentity`/`notifyMembers`, both
+    `@Async` (new `@EnableAsync` on the application class). Sends via the
+    Firebase Admin SDK (`com.google.firebase:firebase-admin`) — this
+    service's one dependency with a genuinely heavy transitive tree
+    (grpc, opentelemetry, google-cloud-core), accepted as the standard
+    official approach over hand-rolling FCM's raw HTTP v1 API. A
+    `FirebaseMessagingException` with `MessagingErrorCode.UNREGISTERED`
+    (a dead token) auto-deletes that `DeviceToken` row.
+  - **`FirebaseConfig`**: `firebase.credentials-json` (base64-encoded
+    service-account JSON) comes from Vault, same pattern as
+    `aws.s3.access-key` — deliberately left **empty** in every
+    `.env*.example` and the real dev `.env` (not a placeholder that looks
+    functional). When empty, the `Optional<FirebaseMessaging>` bean is
+    empty and `NotificationService` logs what it would have sent instead
+    of failing — the whole feature is buildable, testable, and
+    live-verifiable today without a real Firebase project, and starts
+    actually sending the moment `MYCOMMUNITY_FIREBASE_CREDENTIALS_JSON`
+    is set for real. Mirrored into all three root `docker-compose*.yml`
+    vault-init blocks (deliberately **not** `:?required`, unlike every
+    other secret there) and `infra/vault/vault-init.sh`.
+  - **Wired into six existing services**, one call each, at the point
+    the event already happens — no new architecture, just a new call
+    site per trigger: `AnnouncementService.createAnnouncement` (broadcast
+    to every ACTIVE member except the poster), `PaymentService.recordPayment`
+    (bill's member), `CommunityJoinRequestService.approve/rejectJoinRequest`
+    (the requester), `VisitorService.checkIn` (the host, only if the
+    actor isn't the host themselves), `ComplaintService.assignComplaint`/
+    `updateStatus` (the new assignee / the raiser), `AmenityBookingService.approve/rejectBooking`
+    (the booker).
+  - **Found and fixed a real test-fixture bug while wiring this up** (not
+    a service bug): `CommunityJoinRequestServiceTest.rejectJoinRequest_marksRejected`
+    built a `CommunityJoinRequest` with no `community` set, which NPE'd
+    once the new reject-notification code read `joinRequest.getCommunity().getName()`
+    — real usage always has `community` set (it's set at creation), so
+    fixed the test fixture, not the service, same precedent as session
+    (10)'s `VisitorServiceTest` fixture fix.
+  - 11 new unit tests (`NotificationServiceTest` 6 — including mocking a
+    `FirebaseMessagingException` to exercise the stale-token-deletion
+    path, `DeviceTokenServiceTest` 5), plus `NotificationService` mocked
+    into the six existing test classes above (no new test cases needed
+    there beyond wiring, since it's a mock with no assertions of its
+    own). Full suite: 164/164 across the twenty service test classes; the
+    one pre-existing DB-dependent context test still needs a live
+    Postgres.
+  - **Live-verified end-to-end** against the rebuilt dev container: `V14`
+    applied. Confirmed the startup log shows `FirebaseConfig`'s warning
+    ("firebase.credentials-json is not configured...") exactly as
+    designed. Reused community id 2 and its three existing test
+    identities. Confirmed: no token on device registration → 401;
+    register a device → 201; list own devices → 200, `fcmToken` correctly
+    never present in the response; re-registering the same `deviceId`
+    with a new `fcmToken` → 201 with the *same* id (upsert, not a
+    duplicate row, confirmed via the list still showing exactly one
+    entry); unregister a nonexistent device → 404; unregister a real one
+    → 204, confirmed gone from the list. Then exercised real trigger
+    paths: posting an announcement correctly logged
+    `[push notification NOT sent -- Firebase not configured]` targeting
+    the resident's real identity UUID, on a separate `task-N` thread
+    (confirming `@Async` genuinely runs off-thread) and *after* the HTTP
+    response had already been written (confirming the request wasn't
+    blocked waiting on it); the announcement's poster was correctly
+    excluded from the log output; a third member with no registered
+    device correctly produced no log line at all (nothing to notify, by
+    design, not a bug); raising a complaint, assigning it, and advancing
+    its status correctly logged a targeted notification to the raiser's
+    real identity on status change. No unexpected errors in the
+    container logs throughout.
 
 ### 2026-09-01 (2)
 

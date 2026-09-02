@@ -44,6 +44,8 @@ class PaymentServiceTest {
     private CommunityRepository communityRepository;
     @Mock
     private CommunityMemberRepository communityMemberRepository;
+    @Mock
+    private NotificationService notificationService;
 
     private static final Long COMMUNITY_ID = 1L;
     private static final String CALLER_IDENTITY = "22222222-2222-2222-2222-222222222222";
@@ -64,6 +66,7 @@ class PaymentServiceTest {
         setField(service, "billRepository", billRepository);
         setField(service, "billService", billService);
         setField(service, "communityService", communityService);
+        setField(service, "notificationService", notificationService);
         return service;
     }
 

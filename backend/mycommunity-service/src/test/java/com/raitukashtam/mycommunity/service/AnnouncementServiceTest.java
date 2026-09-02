@@ -34,6 +34,8 @@ class AnnouncementServiceTest {
     private CommunityRepository communityRepository;
     @Mock
     private CommunityMemberRepository communityMemberRepository;
+    @Mock
+    private NotificationService notificationService;
 
     private static final Long COMMUNITY_ID = 1L;
     private static final String CALLER_IDENTITY = "22222222-2222-2222-2222-222222222222";
@@ -46,7 +48,9 @@ class AnnouncementServiceTest {
         AnnouncementService service = new AnnouncementService();
         setField(service, "announcementRepository", announcementRepository);
         setField(service, "communityRepository", communityRepository);
+        setField(service, "communityMemberRepository", communityMemberRepository);
         setField(service, "communityService", communityService);
+        setField(service, "notificationService", notificationService);
         return service;
     }
 
@@ -84,6 +88,7 @@ class AnnouncementServiceTest {
         when(communityMemberRepository.findByCommunity_IdAndIdentityIdAndStatus(COMMUNITY_ID, CALLER_IDENTITY, MemberStatus.ACTIVE))
                 .thenReturn(Optional.of(admin));
         when(communityRepository.getReferenceById(COMMUNITY_ID)).thenReturn(community(COMMUNITY_ID));
+        when(communityMemberRepository.findByCommunity_IdAndStatus(COMMUNITY_ID, MemberStatus.ACTIVE)).thenReturn(List.of(admin));
         when(announcementRepository.save(any(Announcement.class))).thenAnswer(invocation -> {
             Announcement a = invocation.getArgument(0);
             a.setId(10L);

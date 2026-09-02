@@ -42,6 +42,8 @@ class AmenityBookingServiceTest {
     private CommunityRepository communityRepository;
     @Mock
     private CommunityMemberRepository communityMemberRepository;
+    @Mock
+    private NotificationService notificationService;
 
     private static final Long COMMUNITY_ID = 1L;
     private static final Long AMENITY_ID = 20L;
@@ -62,6 +64,7 @@ class AmenityBookingServiceTest {
         setField(service, "communityRepository", communityRepository);
         setField(service, "amenityService", amenityService);
         setField(service, "communityService", communityService);
+        setField(service, "notificationService", notificationService);
         return service;
     }
 

@@ -44,6 +44,9 @@ public class PaymentService {
     @Autowired
     private CommunityService communityService;
 
+    @Autowired
+    private NotificationService notificationService;
+
     @Transactional
     public PaymentResponse recordPayment(Long communityId, Long billId, RecordPaymentRequest request, String callerIdentityId) {
         CommunityMember admin = communityService.requireActiveAdmin(communityId, callerIdentityId);
@@ -68,6 +71,9 @@ public class PaymentService {
         bill.setStatus(BillStatus.PAID);
         bill.setPaidAt(paidAt);
         billRepository.save(bill);
+
+        notificationService.notifyIdentity(bill.getMember().getIdentityId(),
+                "Payment received", "Your payment for " + bill.getPeriod() + " (₹" + bill.getAmount() + ") has been recorded.");
 
         return toResponse(savedPayment);
     }

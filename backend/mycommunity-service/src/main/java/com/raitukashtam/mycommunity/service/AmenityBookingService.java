@@ -44,6 +44,9 @@ public class AmenityBookingService {
     @Autowired
     private CommunityService communityService;
 
+    @Autowired
+    private NotificationService notificationService;
+
     private static final List<AmenityBookingStatus> BLOCKING_STATUSES =
             List.of(AmenityBookingStatus.PENDING, AmenityBookingStatus.APPROVED);
 
@@ -102,7 +105,12 @@ public class AmenityBookingService {
         communityService.requireActiveAdmin(communityId, callerIdentityId);
         AmenityBooking booking = requirePendingBooking(communityId, bookingId);
         booking.setStatus(AmenityBookingStatus.APPROVED);
-        return toResponse(bookingRepository.save(booking));
+        AmenityBooking saved = bookingRepository.save(booking);
+
+        notificationService.notifyIdentity(booking.getMember().getIdentityId(),
+                "Booking approved", booking.getAmenity().getName() + " on " + booking.getBookingDate() + " (" + booking.getSlot() + ") is confirmed.");
+
+        return toResponse(saved);
     }
 
     @Transactional
@@ -110,7 +118,12 @@ public class AmenityBookingService {
         communityService.requireActiveAdmin(communityId, callerIdentityId);
         AmenityBooking booking = requirePendingBooking(communityId, bookingId);
         booking.setStatus(AmenityBookingStatus.REJECTED);
-        return toResponse(bookingRepository.save(booking));
+        AmenityBooking saved = bookingRepository.save(booking);
+
+        notificationService.notifyIdentity(booking.getMember().getIdentityId(),
+                "Booking declined", booking.getAmenity().getName() + " on " + booking.getBookingDate() + " (" + booking.getSlot() + ") was declined.");
+
+        return toResponse(saved);
     }
 
     @Transactional

@@ -44,6 +44,8 @@ class CommunityJoinRequestServiceTest {
     private CommunityJoinRequestRepository joinRequestRepository;
     @Mock
     private AuthServiceClient authServiceClient;
+    @Mock
+    private NotificationService notificationService;
     @InjectMocks
     private CommunityService communityService;
 
@@ -59,6 +61,7 @@ class CommunityJoinRequestServiceTest {
         setField(service, "joinRequestRepository", joinRequestRepository);
         setField(service, "communityService", communityService);
         setField(service, "authServiceClient", authServiceClient);
+        setField(service, "notificationService", notificationService);
         return service;
     }
 
@@ -212,6 +215,7 @@ class CommunityJoinRequestServiceTest {
 
         CommunityJoinRequest joinRequest = new CommunityJoinRequest();
         joinRequest.setId(10L);
+        joinRequest.setCommunity(community(1L));
         joinRequest.setStatus(JoinRequestStatus.PENDING);
         when(joinRequestRepository.findByIdAndCommunity_Id(10L, 1L)).thenReturn(Optional.of(joinRequest));
 

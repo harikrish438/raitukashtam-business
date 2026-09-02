@@ -38,6 +38,8 @@ class ComplaintServiceTest {
     private CommunityRepository communityRepository;
     @Mock
     private CommunityMemberRepository communityMemberRepository;
+    @Mock
+    private NotificationService notificationService;
 
     private static final Long COMMUNITY_ID = 1L;
     private static final String CALLER_IDENTITY = "22222222-2222-2222-2222-222222222222";
@@ -52,6 +54,7 @@ class ComplaintServiceTest {
         setField(service, "communityRepository", communityRepository);
         setField(service, "communityMemberRepository", communityMemberRepository);
         setField(service, "communityService", communityService);
+        setField(service, "notificationService", notificationService);
         return service;
     }
 

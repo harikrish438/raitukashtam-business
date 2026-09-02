@@ -67,6 +67,14 @@ aws:
     endpoint-override: ${S3_ENDPOINT_OVERRIDE:}
     auto-create-bucket: ${AWS_S3_AUTO_CREATE_BUCKET:false}
 
+# firebase.credentials-json (base64-encoded service-account JSON) comes
+# from Vault (secret/mycommunity-service) -- deliberately defaults to
+# empty, not a placeholder: FirebaseConfig treats "unset" as "no Firebase
+# project provisioned yet" and NotificationService logs instead of
+# sending, rather than failing.
+firebase:
+  credentials-json: ${FIREBASE_CREDENTIALS_JSON:}
+
 management:
   endpoints:
     web:

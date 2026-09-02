@@ -49,8 +49,9 @@ convention) — this file only covers what's specific to `mycommunity-service`.
   `community_member` and `billing_mode`/`rate_per_sqft` on `community`
   (Phase 12); `V13` added the `committee_member` table, including a
   partial unique index enforcing one current position per member
-  (Phase 13). Phase 6 (Dashboard aggregation) added no migration — it's a
-  pure read-model over existing tables, no new schema. See auth-service's
+  (Phase 13); `V14` added the `device_token` table (Phase 14). Phase 6
+  (Dashboard aggregation) added no migration — it's a pure read-model
+  over existing tables, no new schema. See auth-service's
   own Flyway convention (`baseline-on-migrate`/`baseline-version` in
   `application.yml`) — this service now follows the same pattern.
 - **Document storage (Phase 11, new 2026-08-31)**: uploaded file bytes
@@ -74,6 +75,24 @@ convention) — this file only covers what's specific to `mycommunity-service`.
   S3 with real IAM credentials instead (`.env.test.example`/
   `.env.prod.example` have placeholders, not real keys, same as every
   other prod secret in this repo).
+- **Push notifications (Phase 14, new 2026-09-01)**: sends via Firebase
+  Cloud Messaging (FCM), through the Firebase Admin SDK
+  (`com.google.firebase:firebase-admin`) — this service's one dependency
+  with a genuinely heavy transitive tree (grpc, opentelemetry,
+  google-cloud-core, ~dozens of jars), unlike everything else here;
+  accepted as the standard official approach rather than hand-rolling raw
+  HTTP calls to FCM's v1 API. `FirebaseConfig` reads
+  `firebase.credentials-json` (base64-encoded service-account JSON) from
+  Vault, same pattern as `aws.s3.access-key` — **deliberately left empty
+  until a real Firebase project is provisioned** (needs the user's own
+  Google login, not something this session could do), in which case the
+  `Optional<FirebaseMessaging>` bean is empty and `NotificationService`
+  logs what it would have sent instead of failing. `@EnableAsync` on the
+  application class + `@Async` on `NotificationService`'s two public
+  methods so a triggering request never blocks on notification delivery.
+  A `FirebaseMessagingException` with `MessagingErrorCode.UNREGISTERED`
+  (FCM's way of saying a token is dead) deletes that `DeviceToken` row
+  automatically.
 
 ## Domain model (Phase 1, extended 2026-08-31 — registration, roles, join requests)
 
@@ -318,6 +337,17 @@ earlier.
   done via `end-term` + re-appointment. **Not enforced**: only-one-holder-
   per-position (e.g. two concurrent Presidents) — a stated v1 limitation,
   not built.
+- **DeviceToken** (Phase 14, new 2026-09-01): identityId (the auth
+  Identity UUID, JWT `sub` — **not** community-scoped, since one person's
+  device works across every community they belong to, unlike every other
+  table above), deviceId, fcmToken (never returned in `DeviceTokenResponse`
+  — internal only, same reasoning as `CommunityDocument.s3Key`), platform
+  (enum, `ANDROID` only for now — no iOS app exists). Unique on
+  (identityId, deviceId); registering an already-known pair upserts the
+  fcmToken rather than erroring, since a real app re-registers on every
+  launch/token refresh. Self-service only — a caller registers/lists/
+  unregisters their own devices, there's no ADMIN visibility into anyone
+  else's. See "Push notifications" above for how these get used.
 
 Endpoints (`/api/v1/communities`, all require a Bearer JWT):
 
@@ -406,9 +436,25 @@ Endpoints (`/api/v1/communities`, all require a Bearer JWT):
 | GET | `/api/v1/communities/{id}/committee/{committeeMemberId}` | Any ACTIVE member |
 | PATCH | `/api/v1/communities/{id}/committee/{committeeMemberId}/end-term` | Caller must be an ACTIVE ADMIN; sets termEnd to today; 409 if already ended |
 
+Device-token endpoints (`/api/v1/notifications`, Phase 14) are
+deliberately **not** under `/api/v1/communities` — a device token is
+identity-scoped, not community-scoped, so they live in their own
+`NotificationController`:
+
+| Method | Path | Auth rule |
+|---|---|---|
+| POST | `/api/v1/notifications/devices` | Any authenticated caller; upserts by (identity, deviceId) |
+| GET | `/api/v1/notifications/devices` | Any authenticated caller; their own registered devices only |
+| DELETE | `/api/v1/notifications/devices/{deviceId}` | Any authenticated caller; 404 if not registered to them |
+
 A 13-phase roadmap was agreed with the user for this service's feature
-areas — every phase is now built except push notification delivery
-(blocked on the mobile app's own networking code, see Known gaps below).
+areas — every phase is now built, including push notifications
+(Phase 14, backend side). Real delivery is still gated on a real
+Firebase project's credentials (not provisioned yet) and the mobile
+app's own FCM SDK integration (it has no networking code at all yet,
+see Known gaps below) — but every trigger point, the device-token
+registry, and the FCM-sending code are done and live-verified with
+graceful no-op logging in place of real sends.
 See repo-root
 `PROGRESS.md`'s 2026-08-31 session entry (5). The original full data
 model sketch for these is in `~/.claude/plans/validated-rolling-pizza.md`
@@ -431,6 +477,17 @@ isn't available.
    session in `PROGRESS.md`) and the mobile app's own missing screens
    (Select-Community, Set-Up-PIN) that this service's new endpoints exist
    to support.
+2. **No real Firebase project exists yet** (Phase 14), so push
+   notifications are backend-complete but not actually delivering
+   anything — `NotificationService` logs what it would send instead.
+   Provisioning one needs the user's own Google login (out of this
+   session's reach, same category as the still-missing production S3
+   bucket) — set `MYCOMMUNITY_FIREBASE_CREDENTIALS_JSON` (base64-encoded
+   service-account JSON) once one exists and real sending starts working
+   with no further code changes. Separately, even with real Firebase
+   credentials, nothing would arrive on a phone until the mobile app also
+   gets FCM SDK integration — blocked on the same "no networking code at
+   all" gap as item 1.
 
 ## Files in this directory
 ```

@@ -3,8 +3,10 @@ package com.raitukashtam.mycommunity.service;
 import com.raitukashtam.mycommunity.entity.Announcement;
 import com.raitukashtam.mycommunity.entity.Community;
 import com.raitukashtam.mycommunity.entity.CommunityMember;
+import com.raitukashtam.mycommunity.entity.MemberStatus;
 import com.raitukashtam.mycommunity.exception.ResourceNotFoundException;
 import com.raitukashtam.mycommunity.repository.AnnouncementRepository;
+import com.raitukashtam.mycommunity.repository.CommunityMemberRepository;
 import com.raitukashtam.mycommunity.repository.CommunityRepository;
 import com.raitukashtam.mycommunity.request.AnnouncementRequest;
 import com.raitukashtam.mycommunity.response.AnnouncementResponse;
@@ -30,7 +32,13 @@ public class AnnouncementService {
     private CommunityRepository communityRepository;
 
     @Autowired
+    private CommunityMemberRepository communityMemberRepository;
+
+    @Autowired
     private CommunityService communityService;
+
+    @Autowired
+    private NotificationService notificationService;
 
     @Transactional
     public AnnouncementResponse createAnnouncement(Long communityId, AnnouncementRequest request, String callerIdentityId) {
@@ -43,6 +51,11 @@ public class AnnouncementService {
         announcement.setBody(request.getBody().trim());
         announcement.setPostedBy(poster);
         Announcement saved = announcementRepository.save(announcement);
+
+        List<CommunityMember> recipients = communityMemberRepository.findByCommunity_IdAndStatus(communityId, MemberStatus.ACTIVE).stream()
+                .filter(member -> !member.getId().equals(poster.getId()))
+                .toList();
+        notificationService.notifyMembers(recipients, "New announcement: " + announcement.getTitle(), announcement.getBody());
 
         return toResponse(saved);
     }
