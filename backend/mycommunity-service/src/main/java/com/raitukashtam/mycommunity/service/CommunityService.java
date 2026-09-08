@@ -98,18 +98,23 @@ public class CommunityService {
      * this identity -- the missing piece that let an admin-invited member
      * finally act in the community once they log in for real. Idempotent:
      * a caller with nothing to activate just gets their current list back.
+     * Identities with no mobile number (e.g. Google-only sign-in) can't be
+     * matched to any mobile-number-keyed invitation, so that's treated as
+     * "nothing to activate" rather than an upstream failure.
      */
     @Transactional
     public List<MyCommunityResponse> activateInvitations(String callerIdentityId, String callerToken) {
-        AuthUserProfile callerProfile = requireCallerProfile(callerToken);
+        AuthUserProfile callerProfile = authServiceClient.getCurrentUserProfile(callerToken);
 
-        List<CommunityMember> invited = communityMemberRepository
-                .findByMobileNumberAndStatusAndIdentityIdIsNull(callerProfile.getMobileNumber(), MemberStatus.INVITED);
-        for (CommunityMember member : invited) {
-            member.setIdentityId(callerIdentityId);
-            member.setStatus(MemberStatus.ACTIVE);
+        if (callerProfile != null && callerProfile.getMobileNumber() != null && !callerProfile.getMobileNumber().isBlank()) {
+            List<CommunityMember> invited = communityMemberRepository
+                    .findByMobileNumberAndStatusAndIdentityIdIsNull(callerProfile.getMobileNumber(), MemberStatus.INVITED);
+            for (CommunityMember member : invited) {
+                member.setIdentityId(callerIdentityId);
+                member.setStatus(MemberStatus.ACTIVE);
+            }
+            communityMemberRepository.saveAll(invited);
         }
-        communityMemberRepository.saveAll(invited);
 
         return listMyCommunities(callerIdentityId);
     }
