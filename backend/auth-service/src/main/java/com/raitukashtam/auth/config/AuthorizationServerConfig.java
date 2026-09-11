@@ -7,6 +7,8 @@ import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
 import com.raitukashtam.auth.repository.RefreshTokenLedgerRepository;
+import com.raitukashtam.auth.security.PublicClientRefreshTokenAuthenticationConverter;
+import com.raitukashtam.auth.security.PublicClientRefreshTokenAuthenticationProvider;
 import com.raitukashtam.auth.security.ReuseDetectingAuthorizationService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -14,15 +16,31 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.lang.Nullable;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.crypto.keygen.Base64StringKeyGenerator;
+import org.springframework.security.crypto.keygen.StringKeyGenerator;
 import org.springframework.security.jackson2.SecurityJackson2Modules;
+import org.springframework.security.oauth2.core.OAuth2RefreshToken;
+import org.springframework.security.oauth2.core.OAuth2Token;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtEncoder;
+import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.security.oauth2.server.authorization.JdbcOAuth2AuthorizationService;
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationService;
+import org.springframework.security.oauth2.server.authorization.OAuth2TokenType;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
 import org.springframework.security.oauth2.server.authorization.config.annotation.web.configuration.OAuth2AuthorizationServerConfiguration;
+import org.springframework.security.oauth2.server.authorization.config.annotation.web.configurers.OAuth2AuthorizationServerConfigurer;
 import org.springframework.security.oauth2.server.authorization.jackson2.OAuth2AuthorizationServerJackson2Module;
 import org.springframework.security.oauth2.server.authorization.settings.AuthorizationServerSettings;
+import org.springframework.security.oauth2.server.authorization.token.DelegatingOAuth2TokenGenerator;
+import org.springframework.security.oauth2.server.authorization.token.JwtEncodingContext;
+import org.springframework.security.oauth2.server.authorization.token.JwtGenerator;
+import org.springframework.security.oauth2.server.authorization.token.OAuth2AccessTokenGenerator;
+import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenContext;
+import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenCustomizer;
+import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenGenerator;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
@@ -33,6 +51,7 @@ import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
+import java.time.Instant;
 import java.util.Base64;
 
 /**
@@ -58,8 +77,23 @@ public class AuthorizationServerConfig {
     @Bean
     @Order(1)
     public SecurityFilterChain authorizationServerSecurityFilterChain(
-            HttpSecurity http, CorsConfigurationSource corsConfigurationSource) throws Exception {
+            HttpSecurity http, CorsConfigurationSource corsConfigurationSource,
+            RegisteredClientRepository registeredClientRepository) throws Exception {
         OAuth2AuthorizationServerConfiguration.applyDefaultSecurity(http);
+
+        // Pairs with tokenGenerator() below: that bean makes refresh tokens get issued to
+        // public (NONE-auth) clients on the authorization_code grant; this makes those same
+        // clients able to actually redeem one on the refresh_token grant. Spring's own
+        // PublicClientAuthenticationConverter only ever matches authorization_code+PKCE
+        // (see PublicClientRefreshTokenAuthenticationConverter's javadoc for why), so without
+        // this a refresh_token request from a NONE-auth client never authenticates at all and
+        // 401s via a redirect to /login instead of reaching the token endpoint's grant logic.
+        OAuth2AuthorizationServerConfigurer authorizationServerConfigurer =
+                http.getConfigurer(OAuth2AuthorizationServerConfigurer.class);
+        authorizationServerConfigurer.clientAuthentication(clientAuthentication -> clientAuthentication
+                .authenticationConverter(new PublicClientRefreshTokenAuthenticationConverter())
+                .authenticationProvider(new PublicClientRefreshTokenAuthenticationProvider(registeredClientRepository)));
+
         http.cors(cors -> cors.configurationSource(corsConfigurationSource))
                 .exceptionHandling(exceptions -> exceptions
                         .defaultAuthenticationEntryPointFor(
@@ -106,6 +140,62 @@ public class AuthorizationServerConfig {
     @Bean
     public JwtDecoder jwtDecoder(JWKSource<SecurityContext> jwkSource) {
         return OAuth2AuthorizationServerConfiguration.jwtDecoder(jwkSource);
+    }
+
+    /**
+     * Overrides Spring Authorization Server's default token generator composition so that
+     * public clients (PKCE-only, {@code clientAuthenticationMethod(NONE)} -- every mobile
+     * client registered via JpaRegisteredClientRepository, e.g. mycommunity-android) still get
+     * a refresh token on the authorization_code grant. Spring's built-in
+     * {@code OAuth2RefreshTokenGenerator} deliberately withholds one in exactly that case
+     * (see {@code OAuth2RefreshTokenGenerator.isPublicClientForAuthorizationCodeGrant()}) --
+     * a reasonable default for a client with no way to prove its identity on refresh, but this
+     * deployment already carries the mitigations that make it safe here: refresh tokens are
+     * single-use (reuseRefreshTokens(false)) and any replay of a rotated-away token is caught
+     * and revokes the whole session (ReuseDetectingAuthorizationService) -- the standard
+     * "refresh token rotation" pattern OAuth 2.0 for Native Apps (RFC 8252) recommends for
+     * exactly this kind of public client. Without this, a mobile session dies the moment its
+     * access token expires (currently 1 hour), forcing OTP/PIN/Google re-login every time.
+     * <p>
+     * {@link AlwaysIssueOAuth2RefreshTokenGenerator} is a straight copy of Spring's own
+     * generator minus that one check. The JWT access-token side is otherwise built exactly the
+     * way Spring's own default composition would (same {@link JwtEncoder} derived from the
+     * existing {@code jwkSource} bean, same {@link OAuth2TokenClaimsCustomizer} applied) --
+     * only the refresh-token half of the delegate list is overridden. Deliberately not
+     * replicating Spring's internal {@code DefaultOAuth2TokenCustomizers.jwtCustomizer()} here:
+     * it only adds the mTLS {@code cnf} claim and Token Exchange {@code act} claim, and this
+     * deployment uses neither (no TLS_CLIENT_AUTH/SELF_SIGNED_TLS_CLIENT_AUTH client, no Token
+     * Exchange grant) -- omitting it is a no-op, not a behavior change, for every grant this
+     * service actually issues.
+     */
+    @Bean
+    public OAuth2TokenGenerator<OAuth2Token> tokenGenerator(
+            JWKSource<SecurityContext> jwkSource,
+            @Nullable OAuth2TokenCustomizer<JwtEncodingContext> jwtCustomizer) {
+        JwtEncoder jwtEncoder = new NimbusJwtEncoder(jwkSource);
+        JwtGenerator jwtGenerator = new JwtGenerator(jwtEncoder);
+        if (jwtCustomizer != null) {
+            jwtGenerator.setJwtCustomizer(jwtCustomizer);
+        }
+        OAuth2AccessTokenGenerator accessTokenGenerator = new OAuth2AccessTokenGenerator();
+        return new DelegatingOAuth2TokenGenerator(
+                jwtGenerator, accessTokenGenerator, new AlwaysIssueOAuth2RefreshTokenGenerator());
+    }
+
+    /** See {@link #tokenGenerator} javadoc -- identical to Spring's own OAuth2RefreshTokenGenerator minus the public-client skip. */
+    private static final class AlwaysIssueOAuth2RefreshTokenGenerator implements OAuth2TokenGenerator<OAuth2RefreshToken> {
+        private final StringKeyGenerator refreshTokenGenerator =
+                new Base64StringKeyGenerator(Base64.getUrlEncoder().withoutPadding(), 96);
+
+        @Override
+        public OAuth2RefreshToken generate(OAuth2TokenContext context) {
+            if (!OAuth2TokenType.REFRESH_TOKEN.equals(context.getTokenType())) {
+                return null;
+            }
+            Instant issuedAt = Instant.now();
+            Instant expiresAt = issuedAt.plus(context.getRegisteredClient().getTokenSettings().getRefreshTokenTimeToLive());
+            return new OAuth2RefreshToken(this.refreshTokenGenerator.generateKey(), issuedAt, expiresAt);
+        }
     }
 
     /**

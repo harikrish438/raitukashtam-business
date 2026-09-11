@@ -16,6 +16,7 @@ import org.springframework.security.oauth2.server.authorization.token.OAuth2Toke
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -82,7 +83,13 @@ public class OAuth2TokenClaimsCustomizer implements OAuth2TokenCustomizer<JwtEnc
                     .orElse(List.of());
         }
 
-        context.getClaims().claim("roles", roles);
+        // ArrayList, not the immutable List.of()/Stream.toList() result roles may already be:
+        // Spring persists a copy of the token's claims for introspection, and its secure
+        // Jackson deserializer has no allowlist entry for java.util.ImmutableCollections$ListN
+        // -- reading that row back (e.g. on a refresh_token grant) throws. Only surfaced once
+        // refresh tokens started actually getting redeemed; harmless for plain access tokens,
+        // which are validated locally via JWT signature and never deserialized back this way.
+        context.getClaims().claim("roles", new ArrayList<>(roles));
         if (identity.isPlatformAdmin()) {
             context.getClaims().claim("platform_role", "PLATFORM_ADMIN");
         }

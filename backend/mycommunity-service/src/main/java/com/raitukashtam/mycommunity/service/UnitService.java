@@ -125,6 +125,17 @@ public class UnitService {
     }
 
     @Transactional
+    public UnitResponse reactivateUnit(Long communityId, Long unitId, String callerIdentityId) {
+        communityService.requireActiveAdmin(communityId, callerIdentityId);
+        Unit unit = requireUnit(communityId, unitId);
+        if (unit.isActive()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Unit is already active");
+        }
+        unit.setActive(true);
+        return toResponse(unitRepository.save(unit));
+    }
+
+    @Transactional
     public CommunityMemberResponse assignUnitToMember(Long communityId, Long memberId, AssignUnitRequest request, String callerIdentityId) {
         communityService.requireActiveAdmin(communityId, callerIdentityId);
 

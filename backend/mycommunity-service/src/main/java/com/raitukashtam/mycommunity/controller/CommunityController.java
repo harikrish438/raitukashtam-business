@@ -252,6 +252,14 @@ public class CommunityController {
         return unitService.deactivateUnit(communityId, unitId, jwt.getSubject());
     }
 
+    @PatchMapping("/{communityId}/units/{unitId}/reactivate")
+    public UnitResponse reactivateUnit(@PathVariable("communityId") Long communityId,
+                                        @PathVariable("unitId") Long unitId,
+                                        @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside reactivateUnit method of CommunityController");
+        return unitService.reactivateUnit(communityId, unitId, jwt.getSubject());
+    }
+
     @PostMapping("/{communityId}/join-requests")
     public ResponseEntity<JoinRequestResponse> createJoinRequest(@PathVariable("communityId") Long communityId,
                                                                    @RequestBody @Validated JoinRequestRequest request,
