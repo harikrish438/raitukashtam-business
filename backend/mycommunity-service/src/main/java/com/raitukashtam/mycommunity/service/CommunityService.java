@@ -18,6 +18,7 @@ import com.raitukashtam.mycommunity.request.CommunityRequest;
 import com.raitukashtam.mycommunity.request.MemberProfileUpdateRequest;
 import com.raitukashtam.mycommunity.response.CommunityMemberResponse;
 import com.raitukashtam.mycommunity.response.CommunityResponse;
+import com.raitukashtam.mycommunity.response.CommunitySearchResponse;
 import com.raitukashtam.mycommunity.response.MyCommunityResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -81,6 +82,17 @@ public class CommunityService {
     public CommunityResponse getCommunity(Long communityId, String callerIdentityId) {
         Community community = requireActiveMember(communityId, callerIdentityId).getCommunity();
         return toResponse(community);
+    }
+
+    /** "Find your community to join" search -- any authenticated caller, no membership required
+     * (that's the point: they aren't a member yet). Name-only substring match since that's all
+     * the join-request UI collects; ambiguous matches are left for the caller to disambiguate. */
+    @Transactional(readOnly = true)
+    public List<CommunitySearchResponse> searchCommunities(String name) {
+        return communityRepository.findByNameContainingIgnoreCase(name.trim()).stream()
+                .map(community -> new CommunitySearchResponse(
+                        community.getId(), community.getName(), community.getArea(), community.getDistrict()))
+                .toList();
     }
 
     @Transactional(readOnly = true)

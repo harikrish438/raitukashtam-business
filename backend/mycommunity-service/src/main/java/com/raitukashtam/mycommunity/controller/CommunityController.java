@@ -31,6 +31,7 @@ import com.raitukashtam.mycommunity.response.BillResponse;
 import com.raitukashtam.mycommunity.response.CommitteeMemberResponse;
 import com.raitukashtam.mycommunity.response.CommunityMemberResponse;
 import com.raitukashtam.mycommunity.response.CommunityResponse;
+import com.raitukashtam.mycommunity.response.CommunitySearchResponse;
 import com.raitukashtam.mycommunity.response.ComplaintCommentResponse;
 import com.raitukashtam.mycommunity.response.ComplaintResponse;
 import com.raitukashtam.mycommunity.response.DashboardResponse;
@@ -154,6 +155,12 @@ public class CommunityController {
     public List<MyCommunityResponse> activateInvitations(@AuthenticationPrincipal Jwt jwt) {
         log.info("Inside activateInvitations method of CommunityController");
         return communityService.activateInvitations(jwt.getSubject(), jwt.getTokenValue());
+    }
+
+    @GetMapping("/search")
+    public List<CommunitySearchResponse> searchCommunities(@RequestParam("name") String name) {
+        log.info("Inside searchCommunities method of CommunityController");
+        return communityService.searchCommunities(name);
     }
 
     @GetMapping("/{communityId}")
