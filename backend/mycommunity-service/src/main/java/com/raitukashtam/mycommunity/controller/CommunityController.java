@@ -664,6 +664,14 @@ public class CommunityController {
         return staffService.deactivateStaff(communityId, staffId, jwt.getSubject());
     }
 
+    @PatchMapping("/{communityId}/staff/{staffId}/reactivate")
+    public StaffResponse reactivateStaff(@PathVariable("communityId") Long communityId,
+                                          @PathVariable("staffId") Long staffId,
+                                          @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside reactivateStaff method of CommunityController");
+        return staffService.reactivateStaff(communityId, staffId, jwt.getSubject());
+    }
+
     @PostMapping("/{communityId}/staff/{staffId}/attendance")
     public StaffAttendanceResponse markAttendance(@PathVariable("communityId") Long communityId,
                                                    @PathVariable("staffId") Long staffId,

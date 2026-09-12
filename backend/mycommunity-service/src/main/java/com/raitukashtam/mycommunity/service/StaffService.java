@@ -74,6 +74,17 @@ public class StaffService {
         return toResponse(staffRepository.save(staff));
     }
 
+    @Transactional
+    public StaffResponse reactivateStaff(Long communityId, Long staffId, String callerIdentityId) {
+        communityService.requireActiveAdmin(communityId, callerIdentityId);
+        Staff staff = requireStaff(communityId, staffId);
+        if (staff.isActive()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Staff member is already active");
+        }
+        staff.setActive(true);
+        return toResponse(staffRepository.save(staff));
+    }
+
     /** Package-private -- reused by StaffAttendanceService so marking attendance doesn't duplicate the "staff exists in this community" lookup. */
     Staff requireStaff(Long communityId, Long staffId) {
         return staffRepository.findByIdAndCommunity_Id(staffId, communityId)
