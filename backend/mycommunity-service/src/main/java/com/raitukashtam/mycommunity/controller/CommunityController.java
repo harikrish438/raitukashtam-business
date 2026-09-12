@@ -720,6 +720,14 @@ public class CommunityController {
         return vendorService.deactivateVendor(communityId, vendorId, jwt.getSubject());
     }
 
+    @PatchMapping("/{communityId}/vendors/{vendorId}/reactivate")
+    public VendorResponse reactivateVendor(@PathVariable("communityId") Long communityId,
+                                            @PathVariable("vendorId") Long vendorId,
+                                            @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside reactivateVendor method of CommunityController");
+        return vendorService.reactivateVendor(communityId, vendorId, jwt.getSubject());
+    }
+
     @GetMapping("/{communityId}/vendors/{vendorId}/expenses")
     public List<ExpenseResponse> listExpensesForVendor(@PathVariable("communityId") Long communityId,
                                                          @PathVariable("vendorId") Long vendorId,

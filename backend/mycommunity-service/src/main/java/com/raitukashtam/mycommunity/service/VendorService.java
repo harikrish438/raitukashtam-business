@@ -74,6 +74,17 @@ public class VendorService {
         return toResponse(vendorRepository.save(vendor));
     }
 
+    @Transactional
+    public VendorResponse reactivateVendor(Long communityId, Long vendorId, String callerIdentityId) {
+        communityService.requireActiveAdmin(communityId, callerIdentityId);
+        Vendor vendor = requireVendor(communityId, vendorId);
+        if (vendor.isActive()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Vendor is already active");
+        }
+        vendor.setActive(true);
+        return toResponse(vendorRepository.save(vendor));
+    }
+
     /** Package-private -- reused by ExpenseService so linking an expense to a vendor doesn't duplicate the "vendor exists in this community" lookup. */
     Vendor requireVendor(Long communityId, Long vendorId) {
         return vendorRepository.findByIdAndCommunity_Id(vendorId, communityId)
