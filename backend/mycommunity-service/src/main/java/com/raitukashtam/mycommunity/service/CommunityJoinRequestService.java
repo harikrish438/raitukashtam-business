@@ -8,6 +8,7 @@ import com.raitukashtam.mycommunity.entity.CommunityMember;
 import com.raitukashtam.mycommunity.entity.CommunityRole;
 import com.raitukashtam.mycommunity.entity.JoinRequestStatus;
 import com.raitukashtam.mycommunity.entity.MemberStatus;
+import com.raitukashtam.mycommunity.entity.NotificationType;
 import com.raitukashtam.mycommunity.exception.ResourceAlreadyExistsException;
 import com.raitukashtam.mycommunity.exception.ResourceNotFoundException;
 import com.raitukashtam.mycommunity.repository.CommunityJoinRequestRepository;
@@ -82,7 +83,8 @@ public class CommunityJoinRequestService {
         List<CommunityMember> admins = communityMemberRepository.findByCommunity_IdAndRoleAndStatus(
                 communityId, CommunityRole.ADMIN, MemberStatus.ACTIVE);
         notificationService.notifyMembers(admins, "New join request",
-                joinRequest.getRequesterName() + " wants to join " + community.getName() + ".");
+                joinRequest.getRequesterName() + " wants to join " + community.getName() + ".",
+                communityId, community.getName(), NotificationType.JOIN_REQUEST_SUBMITTED, saved.getId());
 
         return toResponse(saved);
     }
@@ -119,7 +121,8 @@ public class CommunityJoinRequestService {
         joinRequestRepository.save(joinRequest);
 
         notificationService.notifyIdentity(joinRequest.getRequesterIdentityId(),
-                "Join request approved", "Your request to join " + joinRequest.getCommunity().getName() + " was approved.");
+                "Join request approved", "Your request to join " + joinRequest.getCommunity().getName() + " was approved.",
+                communityId, joinRequest.getCommunity().getName(), NotificationType.JOIN_REQUEST_APPROVED, null);
 
         return communityService.toResponse(savedMember);
     }
@@ -132,7 +135,8 @@ public class CommunityJoinRequestService {
         joinRequestRepository.save(joinRequest);
 
         notificationService.notifyIdentity(joinRequest.getRequesterIdentityId(),
-                "Join request declined", "Your request to join " + joinRequest.getCommunity().getName() + " was declined.");
+                "Join request declined", "Your request to join " + joinRequest.getCommunity().getName() + " was declined.",
+                communityId, joinRequest.getCommunity().getName(), NotificationType.JOIN_REQUEST_REJECTED, null);
     }
 
     private CommunityJoinRequest requirePendingRequest(Long communityId, Long requestId) {

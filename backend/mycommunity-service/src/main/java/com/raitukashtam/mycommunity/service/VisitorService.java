@@ -3,6 +3,7 @@ package com.raitukashtam.mycommunity.service;
 import com.raitukashtam.mycommunity.entity.Community;
 import com.raitukashtam.mycommunity.entity.CommunityMember;
 import com.raitukashtam.mycommunity.entity.CommunityRole;
+import com.raitukashtam.mycommunity.entity.NotificationType;
 import com.raitukashtam.mycommunity.entity.Visitor;
 import com.raitukashtam.mycommunity.entity.VisitorStatus;
 import com.raitukashtam.mycommunity.exception.ResourceNotFoundException;
@@ -104,7 +105,8 @@ public class VisitorService {
 
         if (!visitor.getHost().getId().equals(caller.getId())) {
             notificationService.notifyIdentity(visitor.getHost().getIdentityId(),
-                    "Visitor arrived", visitor.getGuestName() + " has checked in.");
+                    "Visitor arrived", visitor.getGuestName() + " has checked in.",
+                    communityId, visitor.getCommunity().getName(), NotificationType.VISITOR_ARRIVED, visitor.getId());
         }
 
         return toResponse(saved);

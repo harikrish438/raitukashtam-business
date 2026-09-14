@@ -4,6 +4,7 @@ import com.raitukashtam.mycommunity.entity.Bill;
 import com.raitukashtam.mycommunity.entity.BillStatus;
 import com.raitukashtam.mycommunity.entity.CommunityMember;
 import com.raitukashtam.mycommunity.entity.CommunityRole;
+import com.raitukashtam.mycommunity.entity.NotificationType;
 import com.raitukashtam.mycommunity.entity.Payment;
 import com.raitukashtam.mycommunity.exception.ResourceNotFoundException;
 import com.raitukashtam.mycommunity.repository.BillRepository;
@@ -73,7 +74,8 @@ public class PaymentService {
         billRepository.save(bill);
 
         notificationService.notifyIdentity(bill.getMember().getIdentityId(),
-                "Payment received", "Your payment for " + bill.getPeriod() + " (₹" + bill.getAmount() + ") has been recorded.");
+                "Payment received", "Your payment for " + bill.getPeriod() + " (₹" + bill.getAmount() + ") has been recorded.",
+                communityId, bill.getCommunity().getName(), NotificationType.PAYMENT_RECORDED, bill.getId());
 
         return toResponse(savedPayment);
     }

@@ -7,7 +7,9 @@ import com.google.firebase.messaging.MessagingErrorCode;
 import com.raitukashtam.mycommunity.entity.CommunityMember;
 import com.raitukashtam.mycommunity.entity.DevicePlatform;
 import com.raitukashtam.mycommunity.entity.DeviceToken;
+import com.raitukashtam.mycommunity.entity.NotificationType;
 import com.raitukashtam.mycommunity.repository.DeviceTokenRepository;
+import com.raitukashtam.mycommunity.repository.NotificationRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -25,13 +27,18 @@ class NotificationServiceTest {
     @Mock
     private DeviceTokenRepository deviceTokenRepository;
     @Mock
+    private NotificationRepository notificationRepository;
+    @Mock
     private FirebaseMessaging firebaseMessaging;
 
     private static final String IDENTITY_ID = "11111111-1111-1111-1111-111111111111";
+    private static final Long COMMUNITY_ID = 1L;
+    private static final String COMMUNITY_NAME = "Test Community";
 
     private NotificationService buildService(boolean firebaseConfigured) {
         NotificationService service = new NotificationService();
         setField(service, "deviceTokenRepository", deviceTokenRepository);
+        setField(service, "notificationRepository", notificationRepository);
         setField(service, "firebaseMessaging", firebaseConfigured ? Optional.of(firebaseMessaging) : Optional.empty());
         return service;
     }
@@ -60,7 +67,7 @@ class NotificationServiceTest {
     void notifyIdentity_doesNothing_whenIdentityIdIsNull() {
         NotificationService service = buildService(true);
 
-        service.notifyIdentity(null, "Title", "Body");
+        service.notifyIdentity(null, "Title", "Body", COMMUNITY_ID, COMMUNITY_NAME, NotificationType.ANNOUNCEMENT, null);
 
         verifyNoInteractions(deviceTokenRepository);
     }
@@ -70,7 +77,7 @@ class NotificationServiceTest {
         NotificationService service = buildService(false);
         when(deviceTokenRepository.findByIdentityId(IDENTITY_ID)).thenReturn(List.of(deviceToken(1L)));
 
-        service.notifyIdentity(IDENTITY_ID, "Title", "Body");
+        service.notifyIdentity(IDENTITY_ID, "Title", "Body", COMMUNITY_ID, COMMUNITY_NAME, NotificationType.ANNOUNCEMENT, null);
 
         verifyNoInteractions(firebaseMessaging);
         verify(deviceTokenRepository, never()).delete(any());
@@ -84,7 +91,7 @@ class NotificationServiceTest {
         when(deviceTokenRepository.findByIdentityId(IDENTITY_ID)).thenReturn(List.of(token1, token2));
         when(firebaseMessaging.send(any(Message.class))).thenReturn("message-id");
 
-        service.notifyIdentity(IDENTITY_ID, "Title", "Body");
+        service.notifyIdentity(IDENTITY_ID, "Title", "Body", COMMUNITY_ID, COMMUNITY_NAME, NotificationType.ANNOUNCEMENT, null);
 
         verify(firebaseMessaging, times(2)).send(any(Message.class));
         verify(deviceTokenRepository, never()).delete(any());
@@ -99,7 +106,7 @@ class NotificationServiceTest {
         when(exception.getMessagingErrorCode()).thenReturn(MessagingErrorCode.UNREGISTERED);
         when(firebaseMessaging.send(any(Message.class))).thenThrow(exception);
 
-        service.notifyIdentity(IDENTITY_ID, "Title", "Body");
+        service.notifyIdentity(IDENTITY_ID, "Title", "Body", COMMUNITY_ID, COMMUNITY_NAME, NotificationType.ANNOUNCEMENT, null);
 
         verify(deviceTokenRepository).delete(token);
     }
@@ -113,7 +120,7 @@ class NotificationServiceTest {
         when(exception.getMessagingErrorCode()).thenReturn(MessagingErrorCode.INTERNAL);
         when(firebaseMessaging.send(any(Message.class))).thenThrow(exception);
 
-        service.notifyIdentity(IDENTITY_ID, "Title", "Body");
+        service.notifyIdentity(IDENTITY_ID, "Title", "Body", COMMUNITY_ID, COMMUNITY_NAME, NotificationType.ANNOUNCEMENT, null);
 
         verify(deviceTokenRepository, never()).delete(any());
     }
@@ -127,7 +134,7 @@ class NotificationServiceTest {
         withoutIdentity.setIdentityId(null);
         when(deviceTokenRepository.findByIdentityId(IDENTITY_ID)).thenReturn(List.of());
 
-        service.notifyMembers(List.of(withIdentity, withoutIdentity), "Title", "Body");
+        service.notifyMembers(List.of(withIdentity, withoutIdentity), "Title", "Body", COMMUNITY_ID, COMMUNITY_NAME, NotificationType.ANNOUNCEMENT, null);
 
         verify(deviceTokenRepository, times(1)).findByIdentityId(any());
         verify(deviceTokenRepository).findByIdentityId(IDENTITY_ID);

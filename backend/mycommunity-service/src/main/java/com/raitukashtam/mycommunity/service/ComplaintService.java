@@ -7,6 +7,7 @@ import com.raitukashtam.mycommunity.entity.Complaint;
 import com.raitukashtam.mycommunity.entity.ComplaintPriority;
 import com.raitukashtam.mycommunity.entity.ComplaintStatus;
 import com.raitukashtam.mycommunity.entity.MemberStatus;
+import com.raitukashtam.mycommunity.entity.NotificationType;
 import com.raitukashtam.mycommunity.exception.ResourceNotFoundException;
 import com.raitukashtam.mycommunity.repository.CommunityMemberRepository;
 import com.raitukashtam.mycommunity.repository.CommunityRepository;
@@ -71,7 +72,8 @@ public class ComplaintService {
         List<CommunityMember> admins = communityMemberRepository.findByCommunity_IdAndRoleAndStatus(
                 communityId, CommunityRole.ADMIN, MemberStatus.ACTIVE);
         notificationService.notifyMembers(admins, "New complaint raised",
-                raiser.getName() + " raised: " + complaint.getTitle());
+                raiser.getName() + " raised: " + complaint.getTitle(),
+                communityId, community.getName(), NotificationType.COMPLAINT_RAISED, saved.getId());
 
         return toResponse(saved);
     }
@@ -110,7 +112,8 @@ public class ComplaintService {
         Complaint saved = complaintRepository.save(complaint);
 
         notificationService.notifyIdentity(assignee.getIdentityId(),
-                "Complaint assigned to you", complaint.getTitle());
+                "Complaint assigned to you", complaint.getTitle(),
+                communityId, complaint.getCommunity().getName(), NotificationType.COMPLAINT_ASSIGNED, complaint.getId());
 
         return toResponse(saved);
     }
@@ -130,7 +133,8 @@ public class ComplaintService {
         Complaint saved = complaintRepository.save(complaint);
 
         notificationService.notifyIdentity(complaint.getRaisedBy().getIdentityId(),
-                "Complaint update", "\"" + complaint.getTitle() + "\" is now " + target + ".");
+                "Complaint update", "\"" + complaint.getTitle() + "\" is now " + target + ".",
+                communityId, complaint.getCommunity().getName(), NotificationType.COMPLAINT_STATUS_UPDATED, complaint.getId());
 
         return toResponse(saved);
     }

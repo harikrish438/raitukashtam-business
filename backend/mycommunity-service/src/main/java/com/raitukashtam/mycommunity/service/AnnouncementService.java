@@ -4,6 +4,7 @@ import com.raitukashtam.mycommunity.entity.Announcement;
 import com.raitukashtam.mycommunity.entity.Community;
 import com.raitukashtam.mycommunity.entity.CommunityMember;
 import com.raitukashtam.mycommunity.entity.MemberStatus;
+import com.raitukashtam.mycommunity.entity.NotificationType;
 import com.raitukashtam.mycommunity.exception.ResourceNotFoundException;
 import com.raitukashtam.mycommunity.repository.AnnouncementRepository;
 import com.raitukashtam.mycommunity.repository.CommunityMemberRepository;
@@ -55,7 +56,8 @@ public class AnnouncementService {
         List<CommunityMember> recipients = communityMemberRepository.findByCommunity_IdAndStatus(communityId, MemberStatus.ACTIVE).stream()
                 .filter(member -> !member.getId().equals(poster.getId()))
                 .toList();
-        notificationService.notifyMembers(recipients, "New announcement: " + announcement.getTitle(), announcement.getBody());
+        notificationService.notifyMembers(recipients, "New announcement: " + announcement.getTitle(), announcement.getBody(),
+                communityId, community.getName(), NotificationType.ANNOUNCEMENT, saved.getId());
 
         return toResponse(saved);
     }

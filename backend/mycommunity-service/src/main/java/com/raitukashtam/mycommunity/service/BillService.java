@@ -7,6 +7,7 @@ import com.raitukashtam.mycommunity.entity.Community;
 import com.raitukashtam.mycommunity.entity.CommunityMember;
 import com.raitukashtam.mycommunity.entity.CommunityRole;
 import com.raitukashtam.mycommunity.entity.MemberStatus;
+import com.raitukashtam.mycommunity.entity.NotificationType;
 import com.raitukashtam.mycommunity.exception.ResourceAlreadyExistsException;
 import com.raitukashtam.mycommunity.exception.ResourceNotFoundException;
 import com.raitukashtam.mycommunity.repository.BillRepository;
@@ -77,9 +78,12 @@ public class BillService {
 
         List<Bill> saved = billRepository.saveAll(bills);
 
-        notificationService.notifyMembers(activeMembers, "New bill generated",
-                "A bill for " + request.getPeriod() + " is due" +
-                        (request.getDueDate() != null ? " on " + request.getDueDate() : "") + ".");
+        String body = "A bill for " + request.getPeriod() + " is due" +
+                (request.getDueDate() != null ? " on " + request.getDueDate() : "") + ".";
+        for (Bill bill : saved) {
+            notificationService.notifyIdentity(bill.getMember().getIdentityId(), "New bill generated", body,
+                    communityId, community.getName(), NotificationType.BILL_GENERATED, bill.getId());
+        }
 
         return saved.stream().map(this::toResponse).toList();
     }

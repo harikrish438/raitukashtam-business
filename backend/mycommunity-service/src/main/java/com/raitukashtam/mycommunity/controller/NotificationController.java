@@ -2,7 +2,9 @@ package com.raitukashtam.mycommunity.controller;
 
 import com.raitukashtam.mycommunity.request.RegisterDeviceRequest;
 import com.raitukashtam.mycommunity.response.DeviceTokenResponse;
+import com.raitukashtam.mycommunity.response.NotificationResponse;
 import com.raitukashtam.mycommunity.service.DeviceTokenService;
+import com.raitukashtam.mycommunity.service.NotificationHistoryService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -27,6 +29,22 @@ import java.util.List;
 public class NotificationController {
     @Autowired
     private DeviceTokenService deviceTokenService;
+
+    @Autowired
+    private NotificationHistoryService notificationHistoryService;
+
+    @GetMapping("/mine")
+    public List<NotificationResponse> listMyNotifications(@AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside listMyNotifications method of NotificationController");
+        return notificationHistoryService.listMine(jwt.getSubject());
+    }
+
+    @PatchMapping("/{id}/read")
+    public ResponseEntity<Void> markRead(@PathVariable("id") Long id, @AuthenticationPrincipal Jwt jwt) {
+        log.info("Inside markRead method of NotificationController");
+        notificationHistoryService.markRead(id, jwt.getSubject());
+        return ResponseEntity.noContent().build();
+    }
 
     @PostMapping("/devices")
     public ResponseEntity<DeviceTokenResponse> registerDevice(@RequestBody @Validated RegisterDeviceRequest request,

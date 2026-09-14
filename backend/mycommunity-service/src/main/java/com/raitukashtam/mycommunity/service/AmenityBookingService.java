@@ -6,6 +6,7 @@ import com.raitukashtam.mycommunity.entity.AmenityBookingStatus;
 import com.raitukashtam.mycommunity.entity.Community;
 import com.raitukashtam.mycommunity.entity.CommunityMember;
 import com.raitukashtam.mycommunity.entity.CommunityRole;
+import com.raitukashtam.mycommunity.entity.NotificationType;
 import com.raitukashtam.mycommunity.exception.ResourceAlreadyExistsException;
 import com.raitukashtam.mycommunity.exception.ResourceNotFoundException;
 import com.raitukashtam.mycommunity.repository.AmenityBookingRepository;
@@ -108,7 +109,8 @@ public class AmenityBookingService {
         AmenityBooking saved = bookingRepository.save(booking);
 
         notificationService.notifyIdentity(booking.getMember().getIdentityId(),
-                "Booking approved", booking.getAmenity().getName() + " on " + booking.getBookingDate() + " (" + booking.getSlot() + ") is confirmed.");
+                "Booking approved", booking.getAmenity().getName() + " on " + booking.getBookingDate() + " (" + booking.getSlot() + ") is confirmed.",
+                communityId, booking.getCommunity().getName(), NotificationType.BOOKING_APPROVED, booking.getId());
 
         return toResponse(saved);
     }
@@ -121,7 +123,8 @@ public class AmenityBookingService {
         AmenityBooking saved = bookingRepository.save(booking);
 
         notificationService.notifyIdentity(booking.getMember().getIdentityId(),
-                "Booking declined", booking.getAmenity().getName() + " on " + booking.getBookingDate() + " (" + booking.getSlot() + ") was declined.");
+                "Booking declined", booking.getAmenity().getName() + " on " + booking.getBookingDate() + " (" + booking.getSlot() + ") was declined.",
+                communityId, booking.getCommunity().getName(), NotificationType.BOOKING_REJECTED, booking.getId());
 
         return toResponse(saved);
     }
