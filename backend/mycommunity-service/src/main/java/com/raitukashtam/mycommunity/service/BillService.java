@@ -53,6 +53,9 @@ public class BillService {
     @Autowired
     private CommunityService communityService;
 
+    @Autowired
+    private NotificationService notificationService;
+
     @Transactional
     public List<BillResponse> generateBills(Long communityId, GenerateBillsRequest request, String callerIdentityId) {
         communityService.requireActiveAdmin(communityId, callerIdentityId);
@@ -72,7 +75,13 @@ public class BillService {
                 ? buildAreaBasedBills(community, activeMembers, request)
                 : buildFlatBills(community, activeMembers, request);
 
-        return billRepository.saveAll(bills).stream().map(this::toResponse).toList();
+        List<Bill> saved = billRepository.saveAll(bills);
+
+        notificationService.notifyMembers(activeMembers, "New bill generated",
+                "A bill for " + request.getPeriod() + " is due" +
+                        (request.getDueDate() != null ? " on " + request.getDueDate() : "") + ".");
+
+        return saved.stream().map(this::toResponse).toList();
     }
 
     private List<Bill> buildFlatBills(Community community, List<CommunityMember> activeMembers, GenerateBillsRequest request) {

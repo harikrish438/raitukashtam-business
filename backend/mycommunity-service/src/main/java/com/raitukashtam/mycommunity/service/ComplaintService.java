@@ -6,6 +6,7 @@ import com.raitukashtam.mycommunity.entity.CommunityRole;
 import com.raitukashtam.mycommunity.entity.Complaint;
 import com.raitukashtam.mycommunity.entity.ComplaintPriority;
 import com.raitukashtam.mycommunity.entity.ComplaintStatus;
+import com.raitukashtam.mycommunity.entity.MemberStatus;
 import com.raitukashtam.mycommunity.exception.ResourceNotFoundException;
 import com.raitukashtam.mycommunity.repository.CommunityMemberRepository;
 import com.raitukashtam.mycommunity.repository.CommunityRepository;
@@ -66,6 +67,11 @@ public class ComplaintService {
         complaint.setPriority(request.getPriority() != null ? request.getPriority() : ComplaintPriority.MEDIUM);
         complaint.setStatus(ComplaintStatus.OPEN);
         Complaint saved = complaintRepository.save(complaint);
+
+        List<CommunityMember> admins = communityMemberRepository.findByCommunity_IdAndRoleAndStatus(
+                communityId, CommunityRole.ADMIN, MemberStatus.ACTIVE);
+        notificationService.notifyMembers(admins, "New complaint raised",
+                raiser.getName() + " raised: " + complaint.getTitle());
 
         return toResponse(saved);
     }

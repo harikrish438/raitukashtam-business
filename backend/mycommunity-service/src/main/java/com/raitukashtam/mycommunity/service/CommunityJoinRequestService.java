@@ -79,6 +79,11 @@ public class CommunityJoinRequestService {
         joinRequest.setStatus(JoinRequestStatus.PENDING);
         CommunityJoinRequest saved = joinRequestRepository.save(joinRequest);
 
+        List<CommunityMember> admins = communityMemberRepository.findByCommunity_IdAndRoleAndStatus(
+                communityId, CommunityRole.ADMIN, MemberStatus.ACTIVE);
+        notificationService.notifyMembers(admins, "New join request",
+                joinRequest.getRequesterName() + " wants to join " + community.getName() + ".");
+
         return toResponse(saved);
     }
 
