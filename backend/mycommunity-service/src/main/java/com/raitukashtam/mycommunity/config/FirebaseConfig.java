@@ -11,17 +11,26 @@ import org.springframework.context.annotation.Configuration;
 
 import java.io.ByteArrayInputStream;
 import java.util.Base64;
-import java.util.Optional;
 
 /**
  * firebase.credentials-json comes from Vault (secret/mycommunity-service),
  * same pattern as aws.s3.access-key -- base64-encoded (the raw service-
  * account JSON contains quotes/colons/braces that are awkward to carry
  * through a single-line env var otherwise). Deliberately optional: when
- * unset (no Firebase project provisioned yet), this bean is empty and
+ * unset (no Firebase project provisioned yet), this bean is absent and
  * NotificationService logs what it would have sent instead of failing --
  * the trigger-point wiring works and is testable today, and real sending
  * starts the moment a real credential is dropped into Vault.
+ *
+ * Returns a plain (possibly null) FirebaseMessaging rather than
+ * Optional<FirebaseMessaging>: Spring's @Autowired Optional<T> support
+ * resolves by looking up a bean of the unwrapped type T, so a @Bean method
+ * that itself returns Optional<T> registers a bean of type Optional<T> that
+ * no Optional<T>-typed consumer will ever match -- NotificationService's
+ * `Optional<FirebaseMessaging>` field silently resolved to empty even when
+ * this method successfully built a real FirebaseMessaging. Returning a
+ * (possibly null) FirebaseMessaging directly lets Spring's own Optional
+ * unwrapping do the right thing for that field.
  */
 @Configuration
 @Slf4j
@@ -31,10 +40,10 @@ public class FirebaseConfig {
     private String credentialsJsonBase64;
 
     @Bean
-    public Optional<FirebaseMessaging> firebaseMessaging() {
+    public FirebaseMessaging firebaseMessaging() {
         if (credentialsJsonBase64 == null || credentialsJsonBase64.isBlank()) {
             log.warn("firebase.credentials-json is not configured -- push notifications will be logged only, not actually sent");
-            return Optional.empty();
+            return null;
         }
         try {
             byte[] decoded = Base64.getDecoder().decode(credentialsJsonBase64);
@@ -43,10 +52,10 @@ public class FirebaseConfig {
             FirebaseApp app = FirebaseApp.getApps().isEmpty()
                     ? FirebaseApp.initializeApp(options)
                     : FirebaseApp.getInstance();
-            return Optional.of(FirebaseMessaging.getInstance(app));
+            return FirebaseMessaging.getInstance(app);
         } catch (Exception e) {
             log.error("Failed to initialize Firebase from firebase.credentials-json -- push notifications will be logged only, not actually sent", e);
-            return Optional.empty();
+            return null;
         }
     }
 }

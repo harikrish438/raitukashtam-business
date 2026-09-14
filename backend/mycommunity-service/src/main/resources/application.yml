@@ -67,13 +67,15 @@ aws:
     endpoint-override: ${S3_ENDPOINT_OVERRIDE:}
     auto-create-bucket: ${AWS_S3_AUTO_CREATE_BUCKET:false}
 
-# firebase.credentials-json (base64-encoded service-account JSON) comes
-# from Vault (secret/mycommunity-service) -- deliberately defaults to
-# empty, not a placeholder: FirebaseConfig treats "unset" as "no Firebase
-# project provisioned yet" and NotificationService logs instead of
-# sending, rather than failing.
-firebase:
-  credentials-json: ${FIREBASE_CREDENTIALS_JSON:}
+# firebase.credentials-json (base64-encoded service-account JSON) comes from Vault
+# (secret/mycommunity-service), same pattern as aws.s3.access-key -- no default here.
+# FirebaseConfig's own @Value("${firebase.credentials-json:}") already tolerates it being
+# absent (treats "unset" as "no Firebase project provisioned yet" and NotificationService
+# logs instead of sending, rather than failing), so there's nothing to bind here. A prior
+# version of this file had `credentials-json: ${FIREBASE_CREDENTIALS_JSON:}` -- that env var
+# is never set anywhere (only the differently-named MYCOMMUNITY_FIREBASE_CREDENTIALS_JSON is,
+# and only for vault-init.sh to seed Vault), so it silently pinned this property to empty in
+# the local property source, shadowing whatever Vault actually supplied for the same key.
 
 management:
   endpoints:
