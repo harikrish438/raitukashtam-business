@@ -1,0 +1,55 @@
+# Automated API-test profile (mvn test / CI) -- mirrors auth-service's own
+# application-apitest.yml convention. NOT application-test.yml (that one
+# is the deployed "test" environment and mandatorily imports from Vault via
+# `spring.config.import: vault://`). This profile has no spring.config.import
+# at all, so spring-cloud-starter-vault-config's config-data import never
+# activates and Vault is never contacted -- everything needed is either a
+# checked-in dummy value below or injected by AbstractCrossTenantTest via
+# @DynamicPropertySource (Testcontainers Postgres via @ServiceConnection,
+# a WireMock-served JWKS for the JWT resource-server check).
+server:
+  port: 18081
+
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+
+# Never actually resolved by any endpoint this suite exercises (only
+# createCommunity/activateInvitations/createJoinRequest call out to
+# auth-service, and this suite seeds communities/members directly via
+# repositories instead of through those endpoints) -- left as a harmless
+# unreachable default rather than wired to WireMock, since nothing here
+# calls it.
+auth:
+  service:
+    url: http://localhost:19999
+
+aws:
+  s3:
+    # Normally Vault-supplied (no default in application.yml, unlike
+    # firebase.credentials-json which tolerates absence) -- S3Config's bean
+    # still gets constructed even though nothing in this suite touches S3,
+    # so these just need to be non-empty strings, never real credentials.
+    access-key: apitest-dummy-access-key
+    secret-key: apitest-dummy-secret-key
+    auto-create-bucket: false
+
+management:
+  # application.yml hardcodes management.server.port: 8081, which would
+  # open a SECOND embedded server bound to 8081 regardless of server.port
+  # above -- colliding with this machine's actual running Docker container
+  # on that port (confirmed live: "Port 8081 is already in use"). Match
+  # server.port so it shares the one server instead, same fix auth-service's
+  # own apitest profile already made for the identical class of problem.
+  server:
+    port: 18081
+  health:
+    vault:
+      enabled: false
+
+logging:
+  level:
+    org.springframework.security: WARN
+    com.raitukashtam: INFO
